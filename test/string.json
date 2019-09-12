@@ -1,0 +1,9 @@
+[
+{"geometry": 
+	{"type":"Point",
+	 "coordinates":[-118.756527482932,50.7005722822447]},
+  "name": "Parking",
+  "type": "Parking",
+  "table": "points_of_interest"
+}
+]
