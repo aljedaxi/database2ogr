@@ -230,23 +230,26 @@ async function get_KML(area_id) {
 
 /**
  * @function main
- * @returns a geospatial document, in <output_format>
+ * @returns the promise of a geospatial document, in <output_format>
  * @param {int} area_id          - the area you want to get features from
  * @param {string} output_format - the format of the returned document
  */
-async function main(area_id, output_format) {
+function main(area_id, output_format) {
   permissible_formats = {
     'GeoJSON': get_GeoJSON_driver,
     'KML': get_KML,
   }
   //TODO: check if area_id is in list of all area_ids? if this isn't controlled lower down.
   try {
-    const ogr = await permissible_formats[output_format](area_id);
-    //console.log(ogr);
+    const ogr = permissible_formats[output_format](area_id);
     return ogr;
   } catch (err) {
     return err;
   }
 }
 
+/*
+to write out the information of the promise, do something like this:
 main(357, 'GeoJSON');
+  .then(g => write_to_file_and_present_to_user(g))
+*/
