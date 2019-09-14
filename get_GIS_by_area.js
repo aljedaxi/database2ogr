@@ -206,6 +206,14 @@ async function get_GeoJSON(area_id) {
 }
 
 /**
+ * @function get_GeoJSON_driver 
+ * get_KML wants GeoJSON objects, but main wants a string. This stringifies get_GeoJSON for main
+ */
+async function get_GeoJSON_driver(area_id) {
+  return JSON.stringify(await get_GeoJSON(area_id));
+}
+
+/**
  * @function get_KML
  * @returns a kml document
  * @param {int} area_id - the area you want to get features from
@@ -219,3 +227,26 @@ async function get_KML(area_id) {
 
   return kml;
 }
+
+/**
+ * @function main
+ * @returns a geospatial document, in <output_format>
+ * @param {int} area_id          - the area you want to get features from
+ * @param {string} output_format - the format of the returned document
+ */
+async function main(area_id, output_format) {
+  permissible_formats = {
+    'GeoJSON': get_GeoJSON_driver,
+    'KML': get_KML,
+  }
+  //TODO: check if area_id is in list of all area_ids? if this isn't controlled lower down.
+  try {
+    const ogr = await permissible_formats[output_format](area_id);
+    //console.log(ogr);
+    return ogr;
+  } catch (err) {
+    return err;
+  }
+}
+
+main(357, 'GeoJSON');
