@@ -139,20 +139,17 @@ async function* get_from_database(queries, area_id, client) {
 }
 
 /**
- * @function main
+ * @function get_GeoJSON
  * @description get a GeoJSON FeatureCollection with a Feature for each row of each table for which there is a query object in queries.
  * @param {int} area_id - the area you want features from
+ * the database gets its config information from environment variables
  */
-async function main(area_id) {
+async function get_GeoJSON(area_id) {
   function connect_to_database(constring) {
     const {Pool, Client} = require('pg');
 
-    return new Client({
-      connectionString: constring,
-    });
+    return new Client();
   }
-
-  const CONSTRING = 'postgresql://postgres:ZkyKGQem@ates.c04cdk6ard61.us-west-2.rds.amazonaws.com/ates';
 
   const queries = [
     new Query(
@@ -189,7 +186,7 @@ async function main(area_id) {
     ),
   ];
 
-  const client = connect_to_database(CONSTRING);
+  const client = connect_to_database();
 
   client.connect();
 
@@ -201,11 +198,24 @@ async function main(area_id) {
 
   client.end();
 
-  const geojson = JSON.stringify(feature_collection);
+  //const geojson = JSON.stringify(feature_collection);
 
   //console.log(geojson);
 
-  return geojson;
+  return feature_collection;
 }
 
-//main(357);
+/**
+ * @function get_KML
+ * @returns a kml document
+ * @param {int} area_id - the area you want to get features from
+ */
+async function get_KML(area_id) {
+  const tokml = require('tokml');
+
+  const kml = tokml(await get_GeoJSON(area_id));
+
+  //console.log(kml);
+
+  return kml;
+}

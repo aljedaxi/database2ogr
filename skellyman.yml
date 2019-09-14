@@ -49,6 +49,14 @@ libraries:
   - https://www.npmjs.com/package/kmlwriter
   - https://www.npmjs.com/package/kml-stream
 
+styling:
+ polygons:
+   green: #55ff00
+   blue: #0000ff
+   black: #000000
+   outline: none
+   transparency: 50%
+
 skellyman function:
   - 'return type' => function
     #FeatureCollection: \\ FeatureCollection: \\ geometry: LineString \\ properties:  \\ type: "access_road" \\ database_id: id \\ description: description \\ Feature: \\ geometry: LineString \\ properties: \\ type: "avalanche_path" \\ name: name \\ database_id: id \\ Feature: \\ geometry: Point  \\ properties: \\ type: "point_of_interest" \\ name: name \\ database_id: id \\ Feature:  \\ Point: decision_points \\ properties: decision_points_warnings \\ Feature: \\ Polygon: zones
