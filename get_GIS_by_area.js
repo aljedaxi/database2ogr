@@ -78,7 +78,7 @@ async function collect_features(features) {
  */
 async function* object_to_feature(rows) {
   //SELECT ST_GeoJSON(geom) AS geometry
-  geometry_row = 'geometry';
+  const geometry_row = 'geometry';
   for await (row of rows) {
     geometry = row[geometry_row];
     feature_type = row['table'];
@@ -235,7 +235,7 @@ async function get_KML(area_id) {
  * @param {string} output_format - the format of the returned document
  */
 function main(area_id, output_format) {
-  permissible_formats = {
+  const permissible_formats = {
     'GeoJSON': get_GeoJSON_driver,
     'KML': get_KML,
   }
