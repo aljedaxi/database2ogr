@@ -3,6 +3,8 @@
  * @author jacob
  * @version 0.1
  */
+const {Pool, Client} = require('pg');
+const tokml = require('tokml');
 
 /* represents a GeoJSON feature */
 class Feature {
@@ -145,11 +147,6 @@ async function* get_from_database(queries, area_id, client) {
  * the database gets its config information from environment variables
  */
 async function get_GeoJSON(area_id) {
-  function connect_to_database(constring) {
-    const {Pool, Client} = require('pg');
-
-    return new Client();
-  }
 
   const queries = [
     new Query(
@@ -186,7 +183,7 @@ async function get_GeoJSON(area_id) {
     ),
   ];
 
-  const client = connect_to_database();
+  const client = new Client(); //from require('pg');
 
   client.connect();
 
@@ -219,9 +216,7 @@ async function get_GeoJSON_driver(area_id) {
  * @param {int} area_id - the area you want to get features from
  */
 async function get_KML(area_id) {
-  const tokml = require('tokml');
-
-  const kml = tokml(await get_GeoJSON(area_id));
+  const kml = tokml(await get_GeoJSON(area_id)); //from require('tokml')
 
   //console.log(kml);
 
@@ -247,6 +242,8 @@ function main(area_id, output_format) {
     return err;
   }
 }
+
+//main(357, 'GeoJSON');
 
 /*
 to write out the information of the promise, do something like this:
