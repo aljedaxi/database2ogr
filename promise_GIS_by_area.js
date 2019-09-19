@@ -3,6 +3,7 @@
  * @author jacob
  * @version 0.1
  */
+
 const {Pool, Client} = require('pg');
 const tokml = require('tokml');
 
@@ -34,7 +35,7 @@ class FeatureCollection {
 }
 
 /* information needed for querying the database. */
-class Query {
+function Query(table, non_geometry_columns, where_clause, geometry_column='geom', subquery=null) {
   /**
    * @param {string} table                - table to SELECT from
    * @param {Array}  non_geometry_columns - columns that don't contain geometry
@@ -42,18 +43,12 @@ class Query {
    * @param {string} geometry_column      - column with the geometry
    * @param {Query}  subquery             - in practice, query to decision_point_warnings from inside decision_points
    */
-  constructor(table, non_geometry_columns, where_clause, geometry_column='geom', subquery=null) {
-    this.table = table;
-    this.non_geometry_columns = non_geometry_columns;
-    this.where_clause = where_clause;
-    this.geometry_column = geometry_column;
-    this.subquery = subquery;
-  }
-
-  /**
-   * @returns a SQL valid select statement based for this object
-   */
-  to_query() {
+  this.table = table;
+  this.non_geometry_columns = non_geometry_columns;
+  this.where_clause = where_clause;
+  this.geometry_column = geometry_column;
+  this.subquery = subquery;
+  this.to_query = function() {
     if(this.geometry_column == null) {
       return `SELECT ${this.non_geometry_columns.join(', ')} FROM ${this.table} WHERE ${this.where_clause};`;
     } else {
@@ -62,26 +57,26 @@ class Query {
   }
 }
 
-/**
- * @param {Iterable} features - an iterable of feature objects. In practice, a Generator.
- * @returns {FeatureCollection} a new FeatureCollection object
- */
-async function collect_features(features) {
+function collect_features(features) {
+  /**
+   * @param {Iterable} features - an iterable of feature objects. In practice, a Generator.
+   * @returns {FeatureCollection} a new FeatureCollection object
+   */
   collected_features = [];
-  for await (feature of features) {
+  for (feature of features) {
     collected_features.push(feature);
   }
   return new FeatureCollection(Array.from(collected_features));
 }
 
-/**
- * @param {Iterable} rows - database rows
- * @yields {Feature} a Feature object
- */
-async function* object_to_feature(rows) {
+function* object_to_feature(rows) {
+  /**
+   * @param {Iterable} rows - database rows
+   * @yields {Feature} a Feature object
+   */
   //SELECT ST_GeoJSON(geom) AS geometry
   const geometry_row = 'geometry';
-  for await (row of rows) {
+  for (row of rows) {
     geometry = row[geometry_row];
     feature_type = row['table'];
     delete row[geometry_row];
@@ -94,29 +89,29 @@ async function* object_to_feature(rows) {
   }
 }
 
-/**
- * get the warnings associated with a decision point
- * @param {Query} query             -
- * @param {int}   decision_point_id - 
- * @return {Array} all associated warnings
- */
-async function get_warnings(query, decision_point_id) {
+function get_warnings(query, decision_point_id) {
+  /**
+   * get the warnings associated with a decision point
+   * @param {Query} query             -
+   * @param {int}   decision_point_id - 
+   * @return {Array} all associated warnings
+   */
   let warnings = [];
-  for await (const warning of get_from_database(query_object.subquery, row.id)) {
+  for (const warning of get_from_database(query_object.subquery, row.id)) {
     warnings.append(warning);
   }
   return warnings;
 }
 
-/**
- * @function get_from_database
- * @description get rows from the database
- * @param {Array} queries - Array of Query objects
- * @param {int} area_id   - area_id we're getting data from
- * @param {Client} client - pg Client object used to query the database
- * @yield {row}             database row
- */
-async function* get_from_database(queries, area_id, client) {
+function* get_from_database(queries, area_id, client) {
+  /**
+   * @function get_from_database
+   * @description get rows from the database
+   * @param {Array} queries - Array of Query objects
+   * @param {int} area_id   - area_id we're getting data from
+   * @param {Client} client - pg Client object used to query the database
+   * @yield {row}             database row
+   */
   for(let query_object of queries) {
     let query = {
       name: `get rows from ${query_object.table}`,
@@ -124,10 +119,12 @@ async function* get_from_database(queries, area_id, client) {
       values: [area_id],
     };
 
-    let rows = await client
+    let rows = client
       .query(query)
       .then(res => res.rows)
       .catch(e => console.error(e.stack))
+
+    console.log(rows);
 
     for (let row of rows) {
       row.table = query_object.table;
@@ -140,29 +137,28 @@ async function* get_from_database(queries, area_id, client) {
   } //endfor query of queries
 }
 
-/**
- * @function get_GeoJSON
- * @description get a GeoJSON FeatureCollection with a Feature for each row of each table for which there is a query object in queries.
- * @param {int} area_id - the area you want features from
- * the database gets its config information from environment variables
- */
-async function get_GeoJSON(area_id) {
-
+function get_GeoJSON(area_id) {
+  /**
+   * @function get_GeoJSON
+   * @description get a GeoJSON FeatureCollection with a Feature for each row of each table for which there is a query object in queries.
+   * @param {int} area_id - the area you want features from
+   * the database gets its config information from environment variables
+   */
   const queries = [
     new Query(
       'points_of_interest',
       ['name', 'type'],
-      'area_id=$1',
+      'area_id=$1'
     ),
     new Query(
       'access_roads',
       ['description'],
-      'area_id=$1',
+      'area_id=$1'
     ),
     new Query(
       'avalanche_paths',
       ['name'],
-      'area_id=$1',
+      'area_id=$1'
     ),
     new Query(
       'decision_points',
@@ -173,21 +169,21 @@ async function get_GeoJSON(area_id) {
         'decision_points_warnings',
         ['warning', 'type'],
         'decision_point_id=$1',
-        geometry_row=null,
-      ),
+        geometry_row=null
+      )
     ),
     new Query(
       'zones',
       ['class_code',],
-      'area_id=$1',
-    ),
+      'area_id=$1'
+    )
   ];
 
   const client = new Client(); //from require('pg');
 
   client.connect();
 
-  feature_collection = await collect_features(
+  feature_collection = collect_features(
     object_to_feature(
       get_from_database(queries, area_id, client)
     )
@@ -202,34 +198,34 @@ async function get_GeoJSON(area_id) {
   return feature_collection;
 }
 
-/**
- * @function get_GeoJSON_driver 
- * get_KML wants GeoJSON objects, but main wants a string. This stringifies get_GeoJSON for main
- */
-async function get_GeoJSON_driver(area_id) {
-  return JSON.stringify(await get_GeoJSON(area_id));
+function get_GeoJSON_driver(area_id) {
+  /**
+   * @function get_GeoJSON_driver 
+   * get_KML wants GeoJSON objects, but main wants a string. This stringifies get_GeoJSON for main
+   */
+  return JSON.stringify(get_GeoJSON(area_id));
 }
 
-/**
- * @function get_KML
- * @returns a kml document
- * @param {int} area_id - the area you want to get features from
- */
-async function get_KML(area_id) {
-  const kml = tokml(await get_GeoJSON(area_id)); //from require('tokml')
+function get_KML(area_id) {
+  /**
+   * @function get_KML
+   * @returns a kml document
+   * @param {int} area_id - the area you want to get features from
+   */
+  const kml = tokml(get_GeoJSON(area_id)); //from require('tokml')
 
   //console.log(kml);
 
   return kml;
 }
 
-/**
- * @function main
- * @returns the promise of a geospatial document, in <output_format>
- * @param {int} area_id          - the area you want to get features from
- * @param {string} output_format - the format of the returned document
- */
 function main(area_id, output_format) {
+  /**
+   * @function main
+   * @returns the promise of a geospatial document, in <output_format>
+   * @param {int} area_id          - the area you want to get features from
+   * @param {string} output_format - the format of the returned document
+   */
   const permissible_formats = {
     'GeoJSON': get_GeoJSON_driver,
     'KML': get_KML,
@@ -243,7 +239,9 @@ function main(area_id, output_format) {
   }
 }
 
-//main(357, 'GeoJSON');
+console.log(
+  main(357, 'GeoJSON')
+)
 
 /*
 to write out the information of the promise, do something like this:
