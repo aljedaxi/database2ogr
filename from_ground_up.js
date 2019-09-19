@@ -107,7 +107,6 @@ function query_database(query_object, area_id, client) {
     values: [area_id],
   };
 
-  console.log(query.text);
   return new Promise((resolve, reject) => {
     resolve(
       client.query(query)
@@ -196,7 +195,7 @@ function get_geojson(area_id) {
     .then(r => {
       client.end();
       //TODO upload to mapbox
-      console.log(r);
+      console.log(JSON.stringify(r));
     });
 }
 
