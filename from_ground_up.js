@@ -276,7 +276,12 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
   return new Promise((resolve, reject) => {
     resolve(
       client.query(query)
-        .then(res => res.rows.map(row => row_to_placemark(row, new_placemark)))
+        .then(res => { return {
+            'table': query_object.table,
+            'name': query_object.name,
+            'rows': res.rows.map(row => row_to_placemark(row, new_placemark))
+          };
+        })
         .catch(e => console.error(e.stack))
     );
   });
@@ -328,10 +333,11 @@ function promise_KML(area_id, client, queries, new_placemark) {
 
     const query_promises = queries.map(query => KML_query_database(query, area_id, client, new_placemark));
     Promise.all(query_promises).then(values => {
-      values.forEach(querys_rows => {
-        //console.log(querys_rows[0][1].name);
-        //process.exit();
-        folders.push(new_folder(query.name, querys_rows));
+      values.forEach(wrapped_querys_rows => {
+        if(wrapped_querys_rows.table==='areas_vw'){
+          doc_name = wrapped_querys_rows.rows[0][1].name;
+        }
+        folders.push(new_folder(wrapped_querys_rows.name, wrapped_querys_rows.rows));
       })
       const KML_doc = new_document('NAME OF AREA TODO', folders);
       resolve(KML_doc);
