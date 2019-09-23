@@ -36,8 +36,15 @@ const names = {
 function Feature (geometry, feature_type, properties) {
   this.type = "Feature";
   this.geometry = JSON.parse(geometry);
+  if('bounding_box' in properties) { //TODO try this; if it doesn't work, remove the type:Polygon wrapper
+    this.bounding_box = properties.bounding_box;
+    delete properties.bounding_box;
+  }
+  if ('type' in properties) {
+    properties.type = properties.type.toLowerCase().replace(" ", "-");
+  }
   this.properties = properties;
-  this.properties.type = feature_type;
+  this.properties.table = feature_type;
 }
 
   /**
@@ -107,16 +114,17 @@ function geojson_query_database(query_object, area_id, client) {
     function row_to_object(row) {
       row.table = query_object.table;
       if (row.table == 'decision_points') {
+        //TODO get_warnings
         warnings = get_warnings(query_object.subquery, row.id);
         row.warnings = warnings;
       }
       return row;
     }
     function object_to_feature(row, geometry_column) {
-      geometry_column = typeof geometry_column !== 'undefined' ? geometry_column : 'geometry';
-      geometry = row[geometry_column];
-      feature_type = row['table'];
-      delete row[geometry_row];
+      geometry_column = geometry_column || 'geometry';
+      const geometry = row[geometry_column];
+      const feature_type = row['table'];
+      delete row[geometry_column];
       delete row['table'];
       return new Feature(
         geometry,
@@ -173,11 +181,11 @@ function get_geojson(area_id) {
       'id=$1',
       'GeoJSON',
       'en',
-      bounding_box=true
+      true
     ),
     new Query(
       'points_of_interest',
-      ['id', 'area_id', 'name', 'type', 'comments'], //TODO lowercase and dasherize type
+      ['id', 'area_id', 'name', 'type', 'comments'],
       'area_id=$1',
       'GeoJSON'
     ),
@@ -199,12 +207,16 @@ function get_geojson(area_id) {
       'area_id=$1',
       'GeoJSON',
       'en',
-      bounding_box=false,
-      subquery=new Query(
+      false,
+      new Query(
         'decision_points_warnings',
         ['warning', 'type'],
         'decision_point_id=$1',
-        geometry_row=null
+        'GeoJson',
+        'en',
+        false,
+        null,
+        null
       )
     ),
     new Query(
@@ -213,7 +225,7 @@ function get_geojson(area_id) {
       'area_id=$1',
       'GeoJSON',
       'en',
-      bounding_box=true
+      true
     )
   ];
 
@@ -238,7 +250,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
     function row_to_object(row) {
       row.table = query_object.table;
       if (row.table == 'decision_points') {
-        'dab';
+        //TODO get warnings
       }
       return row;
     }
@@ -659,4 +671,4 @@ function get_KML(area_id, lang) {
   //TODO return a promise of kml which gets zipped up with the images
 }
 
-get_KML(357, 'fr');
+get_geojson(357, 'fr');
