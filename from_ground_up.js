@@ -6,7 +6,7 @@
 
 const {Pool, Client} = require('pg');
 const xml = require('xml');
-const xml_parse_string = require('xml-js').xml2js;
+const xml_parse_string = require('fast-xml-parser').parse;
 
 const names = {
   en: {
@@ -239,20 +239,84 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
     function row_to_object(row) {
       row.table = query_object.table;
       if (row.table == 'decision_points') {
-        warnings = get_warnings(query_object.subquery, row.id);
-        row.warnings = warnings;
+        'dab';
       }
       return row;
     }
     function object_to_feature(row, geometry_column) {
-        //geometry_column = geometry_column || 'geometry';
-        //geometry = row[geometry_column];
-      /* TODO if things don't just work, decompose and recompose geometry here
-        console.log(row.geometry);
-        console.log(xml_parse_string(row.geometry), (err, res) => console.log(res));
-        process.exit();
+      function new_geometry(decomposed_geometry) {
+        function new_point(point) {
+          return {
+            'Point': [
+              {'coordinates': point.coordinates}
+            ]
+          }
+        }
+        function new_linestring(line_string) {
+          return {
+            'LineString': [
+              {'coordinates': line_string.coordinates}
+            ]
+          }
+        }
+        function new_polygon(polygon) {
+          let general_polygon = {
+            'Polygon': [ {
+              'outerBoundaryIs': [
+                 {'LinearRing': [ 
+                     {coordinates: polygon.outerBoundaryIs.LinearRing.coordinates} ] 
+                 } ]
+               }
+            ]
+          }
+
+          if(polygon.innerBoundaryIs) {
+            let inner_boundaries;
+            try {
+              inner_boundaries = polygon.innerBoundaryIs.map(linear_ring => {
+                return {
+                  LinearRing: [
+                    {coordinates: linear_ring.LinearRing.coordinates}
+                  ]
+                };
+              });
+            } catch (err) {
+              inner_boundaries = [
+                { LinearRing: [
+                  {coordinates: polygon.innerBoundaryIs.LinearRing.coordinates}
+                ] }
+              ]
+            }
+            general_polygon.Polygon.push({innerBoundaryIs: inner_boundaries});
+            return general_polygon;
+          } else {
+            return general_polygon;
+          }
+        }
+        if ('Point' in decomposed_geometry) {
+          return new_point(decomposed_geometry.Point);
+        } else if ('LineString' in decomposed_geometry) {
+          return new_linestring(decomposed_geometry.LineString);
+        } else if ('Polygon' in decomposed_geometry) {
+          return new_polygon(decomposed_geometry.Polygon);
+        } else {
+          console.error('uh'); //TODO
+        }
+      }
+      row.geometry = new_geometry(xml_parse_string(row.geometry));
+      if (query_object.table === 'decision_points') {
+        //console.log(row.geometry);
+        //TODO make warnings work
+        'dab'
+      }
+      const final_row = placemark_constructor(row);
+      /*
+      if (query_object.table === 'zones') {
+        //console.log(row.geometry);
+        //console.log(xml(final_row));
+      }
       */
-      return placemark_constructor(row);
+      return final_row;
       /*
         feature_type = row['table'];
         delete row[geometry_row];
@@ -287,10 +351,10 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
   });
 }
 
-function promise_KML(area_id, client, queries, new_placemark) {
-  function new_document(name, folders) {
+function promise_KML(area_id, client, queries, new_placemark, styles) {
+  function new_document(name, folders, styles) {
     let doc = folders.map(f => { return {'Folder': f }; } );
-    //TODO styling stuff here
+    styles.forEach(s => doc.push(s));
     return [ {
       'kml': [
         {'_attr': {
@@ -301,32 +365,13 @@ function promise_KML(area_id, client, queries, new_placemark) {
       ] 
     } ];
   }
-  function new_folder(name, features) {
+  function new_folder(name, features, table) {
     let folder = features.map(f => {
       return {'Placemark': f};
     });
     folder.push({name});
-    //console.log(folder);
-    //console.log(xml(folder));
     return folder;
   }
-  /*
-  const KML_document = new Promise((resolve, reject) => {
-    let folders = [];
-
-    query_promises = queries.map((query) => KML_query_database(query, area_id, client)); //ie, each should make a folder
-    Promise.all(query_promises) //wait for each promise to resolve
-      .then(values => {
-        //values.forEach(querys_features => querys_features.forEach(
-         // feature => folders.push(feature)
-        //));
-        console.log(folders);
-        const KML_document = new_kml_document(folders);
-        resolve(KML_document);
-      });
-  });
-  */
-  query = queries[0];
   const KML_document = new Promise((resolve, reject) => {
     let folders = [];
     let doc_name = '';
@@ -334,12 +379,14 @@ function promise_KML(area_id, client, queries, new_placemark) {
     const query_promises = queries.map(query => KML_query_database(query, area_id, client, new_placemark));
     Promise.all(query_promises).then(values => {
       values.forEach(wrapped_querys_rows => {
-        if(wrapped_querys_rows.table==='areas_vw'){
+        if (wrapped_querys_rows.table==='areas_vw') {
           doc_name = wrapped_querys_rows.rows[0][1].name;
         }
-        folders.push(new_folder(wrapped_querys_rows.name, wrapped_querys_rows.rows));
+        folders.push(
+          new_folder(wrapped_querys_rows.name, wrapped_querys_rows.rows, wrapped_querys_rows.table)
+        );
       })
-      const KML_doc = new_document('NAME OF AREA TODO', folders);
+      const KML_doc = new_document(doc_name, folders, styles);
       resolve(KML_doc);
     }).catch(e => console.error(e.stack));
   });
@@ -348,6 +395,11 @@ function promise_KML(area_id, client, queries, new_placemark) {
 
 function get_KML(area_id, lang) {
   lang = lang || 'en';
+  const LINE_WIDTH = 3; //for LineStyles, in pixels
+  const ICON_NUMBER = [11, 15][0]; //don't really know what this means 
+                                   //but there are two valid chaises: 11 and 15
+  const ICON_DIR = `files-${ICON_NUMBER}`; 
+  const POI_COLOR = 'ff005dff';
 
   const style_urls = {
     'zones': [
@@ -356,54 +408,138 @@ function get_KML(area_id, lang) {
       'zone_blue_style',
       'zone_black_style',
     ],
-    //'areas_vw': 
+    'areas_vw': 'area_styles',
     'access_roads': 'access_road_styles',
     'avalanche_paths': 'avalanche_path_styles',
     'decision_points': 'decision_point_styles',
-    'points_of_interest': 'point_of_interest_styles'
+    'points_of_interest': {
+      Other: 'point_of_interest_other_styles',
+      Parking: 'point_of_interest_parking_styles',
+      ['Rescue Cache']: 'point_of_interest_rescue_cache_styles',
+      Cabin: 'point_of_interest_cabin_styles',
+      Destination: 'point_of_interest_destination_styles',
+      Lake: 'point_of_interest_lake_styles',
+      Mountain: 'point_of_interest_mountain_styles'
+    }
   };
 
-  const style = (url, styles, style_type) => { //what styleUrls point to
-    style_type = style_type || 'Style';
+  const new_Style = (url, styles, style_type) => { 
+    const reverse = (s) => s.split("").reverse().join("");
+    const basic_style = (style_type, default_stylings) => {
+      return (styles) => {
+        //KML uses aabbggrr hex codes, unlike the rest of the civilized world,
+        //which uses rrggbbaa. red green blue alpha/transparency
+        const re_colored_styles = styles.map(s => ('color' in s) ? {color: reverse(s.color)} : s);
+        return {
+          [style_type]: [
+            ...default_stylings,
+            ...re_colored_styles
+          ]
+        };
+      };
+    };
+    const style_types = {
+      LineStyle: basic_style('LineStyle', [ {width: LINE_WIDTH} ]),
+      PolyStyle: basic_style('PolyStyle', []),
+      IconStyle: basic_style('IconStyle', [])
+    };
+
     return {
-      [style_type]: [
+      'Style': [
         {'_attr': {'id': url}},
-        ...styles,
+        style_types[style_type](styles)
       ]
-    }
+    };
   }
 
-  const styles = {
-    'zone_green_style': style('zone_green_style', [
-      {color: '#55ff0088'} //green
-    ]),
-    'zone_blue_style': style('zone_blue_style', [
-      {color: '#0000ff88'} //blue
-    ]),
-    'zone_black_style': style('zone_black_style', [
-      {color: '#00000088'} //black
-    ]),
-    'access_roads': style(style_urls.access_roads, [
-      {color: '#ffff00'}, //yellow
-      {'gx:outerColor': '#00ff00'} //green
-    ], 'LineStyle'),
-    'avalanche_paths': style(style_urls.avalanche_paths, [
-      {color: '#ff0000'}
-    ], 'LineStyle'),
-    'decision_points': style(style_urls.decision_points, [
-      {color: '#ff005d'}
-    ]),
-    'points_of_interest': style(style_urls.points_of_interest, [
-      {color: '#ff0000'}
-    ]),
+  const new_Icon = (icon) => {
+    return {
+      Icon: [
+        {href: `${ICON_DIR}/${icon}-${ICON_NUMBER}.jpg`}
+      ]
+    }
   };
+
+  const styles = {
+    'zones' : [
+      new_Style(style_urls.zones[1], [
+        {color: '55ff0088'} //green
+      ], 'PolyStyle'),
+      new_Style(style_urls.zones[2], [
+        {color: '0000ff88'} //blue
+      ], 'PolyStyle'),
+      new_Style(style_urls.zones[3], [
+        {color: '00000088'} //black
+      ], 'PolyStyle')
+    ],
+    'areas_vw': new_Style(style_urls.areas_vw, [
+      {color: '00000000'} //fully transparent
+    ], 'PolyStyle'),
+    'access_roads': new_Style(style_urls.access_roads, [
+      {color: 'ffff00ff'}, //yellow
+      {'gx:outerColor': 'ff00ff00'}, //green
+      {'gx:outerWidth': LINE_WIDTH + 5} //TODO isn't working but isn't important
+    ], 'LineStyle'),
+    'avalanche_paths': new_Style(style_urls.avalanche_paths, [
+      {color: 'ff0000ff'}
+    ], 'LineStyle'),
+    'decision_points': new_Style(style_urls.decision_points, [
+      {color: 'ff0000ff'},
+      new_Icon('cross')
+    ], 'IconStyle'),
+    'points_of_interest': {
+      Other: new_Style(style_urls.points_of_interest.Other, [
+        {color: POI_COLOR},
+        new_Icon('marker')
+      ], 'IconStyle'),
+      Parking: new_Style(style_urls.points_of_interest.Parking, [
+        {color: POI_COLOR},
+        new_Icon('parking')
+      ], 'IconStyle'),
+      ['Rescue Cache']: new_Style(style_urls.points_of_interest['Rescue Cache'], [
+        {color: POI_COLOR},
+        new_Icon('blood-bank')
+      ], 'IconStyle'),
+      Cabin: new_Style(style_urls.points_of_interest.Cabin, [
+        {color: POI_COLOR},
+        new_Icon('lodging')
+      ], 'IconStyle'),
+      Destination: new_Style(style_urls.points_of_interest.Destination, [
+        {color: POI_COLOR},
+        new_Icon('attraction')
+      ], 'IconStyle'),
+      Lake: new_Style(style_urls.points_of_interest.Lake, [
+        {color: POI_COLOR},
+        new_Icon('water')
+      ], 'IconStyle'),
+      Mountain: new_Style(style_urls.points_of_interest.Mountain, [
+        {color: POI_COLOR},
+        new_Icon('mountain')
+      ], 'IconStyle'),
+    }
+  };
+
+  const hella_flaten_styles = (styles) => {
+    let flat_styles = [];
+    Object.values(styles).forEach(s => {
+      if (s.Style) { 
+        flat_styles.push(s);
+      } else if (Array.isArray(s)) {
+        s.forEach(x => flat_styles.push(x));
+      } else {
+        Object.values(s).forEach(x => flat_styles.push(x));
+      } 
+    });
+    return flat_styles;
+  };
+
+  const styles_for_header = hella_flaten_styles(styles);
 
   const new_placemark = (row, style_urls) => {
     function extend_data(placemark, data) {
       placemark.push({'ExtendedData': data});
     }
     function describe(placemark, description) {
-      //TODO don't let things overlap
       placemark.push({'description': description});
     }
 
@@ -415,11 +551,10 @@ function get_KML(area_id, lang) {
     const type = row.type;
     const description = row.description;
     const warnings = row.warnings;
-    const styleUrl = (class_code) ? style_urls[table][class_code] : style_urls[table] ;
+    let styleUrl;
 
     let placemark = [];
-    placemark.push({'Geometry': geometry});
-    //placemark.push(geometry); //you'll probably have to parse the xml? //TODO change to this
+    placemark.push(geometry);
     if (name) {
       placemark.push({'name': name});
     }
@@ -431,55 +566,56 @@ function get_KML(area_id, lang) {
     }
     if (type) {
       describe(placemark, type);
+      styleUrl = style_urls[table][type];
     }
     if (warnings) {
       extend_data(placemark, warnings);
     }
     if (class_code) {
       extend_data(placemark, class_code);
+      styleUrl = style_urls[table][class_code];
     }
-    if (styleUrl) {
-      placemark.push({styleUrl});
-    }
+    styleUrl = styleUrl || style_urls[table];
+    placemark.push({styleUrl: `#${styleUrl}`});
     return placemark;
   };
 
   const newer_placemark = (row) => new_placemark(row, style_urls);
 
   /*
-  const row = {geometry: 'g', class_code: 3, comments: null, table: 'zones'};
-  const scary_zone = newer_placemark(row);
-  console.log(scary_zone);
-  process.exit();
+    const row = {geometry: 'g', class_code: 3, comments: null, table: 'zones'};
+    const scary_zone = newer_placemark(row);
+    console.log(scary_zone);
+    process.exit();
 
-  const constructor_object = {
-    'zones': (row) => new_placemark(row.geometry, null, row.comments, row.class_code),
-    'areas_vw': (row) => new_placemark(row.geometry, row.name),
-    'access_roads': (row) => new_placemark(row.geometry, null, null, null, null, row.description),
-    'avalanche_paths': (row) => new_placemark(row.geometry, row.name),
-    'decision_points': (row) => new_placemark(row.geometry, row.name, row.comments, null, null, null, row.warnings),
-    'points_of_interest': (row) => new_placemark(row.geometry, row.name, row.comments, row.type)
-  };
-
-    function gen_test_placemarks() {
-      let placemarks = [];
-      placemarks.push(new_zone('g', 'comment', 1));
-      placemarks.push(new_area('g', 'area'));
-      placemarks.push(new_avalanche_path('g', 'av_path'));
-      placemarks.push(new_decision_point(
-        'g', 'scary place', 'scary', ['scary', 'real scary']
-      ));
-      placemarks.push(new_point_of_interest(
-        'g', 'cool place', 'cool', 'comment'
-      ));
-      placemarks.push(new_access_road('g', 'road'));
-
-      //console.log(placemarks);
-      //placemarks.forEach(placemark => console.log(xml(placemark)));
-      return placemarks;
+    const constructor_object = {
+      'zones': (row) => new_placemark(row.geometry, null, row.comments, row.class_code),
+      'areas_vw': (row) => new_placemark(row.geometry, row.name),
+      'access_roads': (row) => new_placemark(row.geometry, null, null, null, null, row.description),
+      'avalanche_paths': (row) => new_placemark(row.geometry, row.name),
+      'decision_points': (row) => new_placemark(row.geometry, row.name, row.comments, null, null, null, row.warnings),
+      'points_of_interest': (row) => new_placemark(row.geometry, row.name, row.comments, row.type)
     };
 
-    const folder = new_folder('zones', gen_test_placemarks());
+      function gen_test_placemarks() {
+        let placemarks = [];
+        placemarks.push(new_zone('g', 'comment', 1));
+        placemarks.push(new_area('g', 'area'));
+        placemarks.push(new_avalanche_path('g', 'av_path'));
+        placemarks.push(new_decision_point(
+          'g', 'scary place', 'scary', ['scary', 'real scary']
+        ));
+        placemarks.push(new_point_of_interest(
+          'g', 'cool place', 'cool', 'comment'
+        ));
+        placemarks.push(new_access_road('g', 'road'));
+
+        //console.log(placemarks);
+        //placemarks.forEach(placemark => console.log(xml(placemark)));
+        return placemarks;
+      };
+
+      const folder = new_folder('zones', gen_test_placemarks());
   */
 
   const queries = [
@@ -513,7 +649,7 @@ function get_KML(area_id, lang) {
     ),
     new Query(
       'decision_points',
-      ['name', 'comments'],
+      ['id', 'name', 'comments'],
       'area_id=$1',
       'KML',
       lang,
@@ -537,19 +673,13 @@ function get_KML(area_id, lang) {
   const client = new Client(); //from require('pg');
   client.connect();
 
-  promise_KML(area_id, client, queries, newer_placemark)
+  const debug = true;
+  promise_KML(area_id, client, queries, newer_placemark, styles_for_header)
     .then(r => {
       client.end();
-      console.log(xml(r));
+      if (debug) { console.log(xml(r)); }
     });
-
-  /*
-  promise_KML(area_id, client, queries)
-    .then(r => {
-      client.end();
-      console.log(r);
-    });
-  */
+  //TODO return a promise of kml which gets zipped up with the images
 }
 
 get_KML(357, 'fr');
