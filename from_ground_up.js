@@ -61,11 +61,12 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
   this.where_clause = where_clause;
   this.subquery = subquery;
   this.ogr_type = ogr_type;
-  this.geometry_column = 'geom';
+  this.geometry_column = (typeof geometry_column === 'null') ? null : 'geom';
   this.bounding_box = typeof bounding_box !== 'undefined' ? bounding_box : false;
   this.lang = typeof lang !== 'undefined' ? lang : 'en';
   this.name = names[this.lang][table];
   this.geometry_transformation;
+  this.to_query;
 
   switch(ogr_type) {
     case 'KML':
@@ -77,18 +78,15 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
       break;
   }
 
-  //TODO redo this section
-  this.to_query = function() {
-    if (this.geometry_column == null) {
-      return `SELECT ${this.non_geometry_columns.join(', ')} FROM ${this.table} WHERE ${this.where_clause};`;
+  if (typeof this.geometry_column === 'null') {
+    this.to_query = `SELECT ${this.non_geometry_columns.join(', ')} FROM ${this.table} WHERE ${this.where_clause};`;
+  } else {
+    if (bounding_box) {
+      this.to_query = `SELECT ${this.geometry_transformation}(${this.geometry_column}) AS geometry, ${this.geometry_transformation}(ST_Envelope(${this.geometry_column})) AS bounding_box, ${this.non_geometry_columns.join(', ')} FROM ${this.table} WHERE ${this.where_clause};`;
     } else {
-      if (bounding_box) {
-        return `SELECT ${this.geometry_transformation}(${this.geometry_column}) AS geometry, ${this.geometry_transformation}(ST_Envelope(${this.geometry_column})) AS bounding_box, ${this.non_geometry_columns.join(', ')} FROM ${this.table} WHERE ${this.where_clause};`;
-      } else {
-        return `SELECT ${this.geometry_transformation}(${this.geometry_column}) AS geometry, ${this.non_geometry_columns.join(', ')} FROM ${this.table} WHERE ${this.where_clause};`;
-      }
+      this.to_query = `SELECT ${this.geometry_transformation}(${this.geometry_column}) AS geometry, ${this.non_geometry_columns.join(', ')} FROM ${this.table} WHERE ${this.where_clause};`;
     }
-  };
+  }
 }
 
   /**
@@ -131,7 +129,7 @@ function geojson_query_database(query_object, area_id, client) {
 
   const query = {
     name: `get rows from ${query_object.table}`,
-    text: query_object.to_query(),
+    text: query_object.to_query,
     values: [area_id],
   };
 
@@ -334,7 +332,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 
   const query = {
     name: `get rows from ${query_object.table}`,
-    text: query_object.to_query(),
+    text: query_object.to_query,
     values: [area_id],
   };
 
@@ -424,117 +422,127 @@ function get_KML(area_id, lang) {
     }
   };
 
-  const new_Style = (url, styles, style_type) => { 
-    const reverse = (s) => s.split("").reverse().join("");
-    const basic_style = (style_type, default_stylings) => {
-      return (styles) => {
-        //KML uses aabbggrr hex codes, unlike the rest of the civilized world,
-        //which uses rrggbbaa. red green blue alpha/transparency
-        const re_colored_styles = styles.map(s => ('color' in s) ? {color: reverse(s.color)} : s);
+  const deal_with_styling = () => {
+    const new_style_collection = () => {
+      const new_Icon = (icon) => {
         return {
-          [style_type]: [
-            ...default_stylings,
-            ...re_colored_styles
+          Icon: [
+            {href: `${ICON_DIR}/${icon}-${ICON_NUMBER}.jpg`}
+          ]
+        }
+      };
+
+      const new_Style = (url, styles, style_type) => { 
+        const reverse = (s) => s.split("").reverse().join("");
+        const basic_style = (style_type, default_stylings) => {
+          return (styles) => {
+            //KML uses aabbggrr hex codes, unlike the rest of the civilized world,
+            //which uses rrggbbaa. red green blue alpha/transparency
+            const re_colored_styles = styles.map(s => ('color' in s) ? {color: reverse(s.color)} : s);
+            return {
+              [style_type]: [
+                ...default_stylings,
+                ...re_colored_styles
+              ]
+            };
+          };
+        };
+        const style_types = {
+          LineStyle: basic_style('LineStyle', [ {width: LINE_WIDTH} ]),
+          PolyStyle: basic_style('PolyStyle', []),
+          IconStyle: basic_style('IconStyle', [])
+        };
+
+        return {
+          'Style': [
+            {'_attr': {'id': url}},
+            style_types[style_type](styles)
           ]
         };
+      }
+
+      const styles = {
+        'zones' : [
+          new_Style(style_urls.zones[1], [
+            {color: '55ff0088'} //green
+          ], 'PolyStyle'),
+          new_Style(style_urls.zones[2], [
+            {color: '0000ff88'} //blue
+          ], 'PolyStyle'),
+          new_Style(style_urls.zones[3], [
+            {color: '00000088'} //black
+          ], 'PolyStyle')
+        ],
+        'areas_vw': new_Style(style_urls.areas_vw, [
+          {color: '00000000'} //fully transparent
+        ], 'PolyStyle'),
+        'access_roads': new_Style(style_urls.access_roads, [
+          {color: 'ffff00ff'}, //yellow
+          {'gx:outerColor': 'ff00ff00'}, //green
+          {'gx:outerWidth': LINE_WIDTH + 5} //TODO isn't working but isn't important
+        ], 'LineStyle'),
+        'avalanche_paths': new_Style(style_urls.avalanche_paths, [
+          {color: 'ff0000ff'}
+        ], 'LineStyle'),
+        'decision_points': new_Style(style_urls.decision_points, [
+          {color: 'ff0000ff'},
+          new_Icon('cross')
+        ], 'IconStyle'),
+        'points_of_interest': {
+          Other: new_Style(style_urls.points_of_interest.Other, [
+            {color: POI_COLOR},
+            new_Icon('marker')
+          ], 'IconStyle'),
+          Parking: new_Style(style_urls.points_of_interest.Parking, [
+            {color: POI_COLOR},
+            new_Icon('parking')
+          ], 'IconStyle'),
+          ['Rescue Cache']: new_Style(style_urls.points_of_interest['Rescue Cache'], [
+            {color: POI_COLOR},
+            new_Icon('blood-bank')
+          ], 'IconStyle'),
+          Cabin: new_Style(style_urls.points_of_interest.Cabin, [
+            {color: POI_COLOR},
+            new_Icon('lodging')
+          ], 'IconStyle'),
+          Destination: new_Style(style_urls.points_of_interest.Destination, [
+            {color: POI_COLOR},
+            new_Icon('attraction')
+          ], 'IconStyle'),
+          Lake: new_Style(style_urls.points_of_interest.Lake, [
+            {color: POI_COLOR},
+            new_Icon('water')
+          ], 'IconStyle'),
+          Mountain: new_Style(style_urls.points_of_interest.Mountain, [
+            {color: POI_COLOR},
+            new_Icon('mountain')
+          ], 'IconStyle'),
+        }
       };
+
+      return styles;
     };
-    const style_types = {
-      LineStyle: basic_style('LineStyle', [ {width: LINE_WIDTH} ]),
-      PolyStyle: basic_style('PolyStyle', []),
-      IconStyle: basic_style('IconStyle', [])
+    
+    const styles = new_style_collection();
+
+    const flatten_styles = (styles) => {
+      let flat_styles = [];
+      Object.values(styles).forEach(s => {
+        if (s.Style) { 
+          flat_styles.push(s);
+        } else if (Array.isArray(s)) {
+          s.forEach(x => flat_styles.push(x));
+        } else {
+          Object.values(s).forEach(x => flat_styles.push(x));
+        } 
+      });
+      return flat_styles;
     };
 
-    return {
-      'Style': [
-        {'_attr': {'id': url}},
-        style_types[style_type](styles)
-      ]
-    };
-  }
-
-  const new_Icon = (icon) => {
-    return {
-      Icon: [
-        {href: `${ICON_DIR}/${icon}-${ICON_NUMBER}.jpg`}
-      ]
-    }
+    return flatten_styles(styles);
   };
 
-  const styles = {
-    'zones' : [
-      new_Style(style_urls.zones[1], [
-        {color: '55ff0088'} //green
-      ], 'PolyStyle'),
-      new_Style(style_urls.zones[2], [
-        {color: '0000ff88'} //blue
-      ], 'PolyStyle'),
-      new_Style(style_urls.zones[3], [
-        {color: '00000088'} //black
-      ], 'PolyStyle')
-    ],
-    'areas_vw': new_Style(style_urls.areas_vw, [
-      {color: '00000000'} //fully transparent
-    ], 'PolyStyle'),
-    'access_roads': new_Style(style_urls.access_roads, [
-      {color: 'ffff00ff'}, //yellow
-      {'gx:outerColor': 'ff00ff00'}, //green
-      {'gx:outerWidth': LINE_WIDTH + 5} //TODO isn't working but isn't important
-    ], 'LineStyle'),
-    'avalanche_paths': new_Style(style_urls.avalanche_paths, [
-      {color: 'ff0000ff'}
-    ], 'LineStyle'),
-    'decision_points': new_Style(style_urls.decision_points, [
-      {color: 'ff0000ff'},
-      new_Icon('cross')
-    ], 'IconStyle'),
-    'points_of_interest': {
-      Other: new_Style(style_urls.points_of_interest.Other, [
-        {color: POI_COLOR},
-        new_Icon('marker')
-      ], 'IconStyle'),
-      Parking: new_Style(style_urls.points_of_interest.Parking, [
-        {color: POI_COLOR},
-        new_Icon('parking')
-      ], 'IconStyle'),
-      ['Rescue Cache']: new_Style(style_urls.points_of_interest['Rescue Cache'], [
-        {color: POI_COLOR},
-        new_Icon('blood-bank')
-      ], 'IconStyle'),
-      Cabin: new_Style(style_urls.points_of_interest.Cabin, [
-        {color: POI_COLOR},
-        new_Icon('lodging')
-      ], 'IconStyle'),
-      Destination: new_Style(style_urls.points_of_interest.Destination, [
-        {color: POI_COLOR},
-        new_Icon('attraction')
-      ], 'IconStyle'),
-      Lake: new_Style(style_urls.points_of_interest.Lake, [
-        {color: POI_COLOR},
-        new_Icon('water')
-      ], 'IconStyle'),
-      Mountain: new_Style(style_urls.points_of_interest.Mountain, [
-        {color: POI_COLOR},
-        new_Icon('mountain')
-      ], 'IconStyle'),
-    }
-  };
-
-  const hella_flaten_styles = (styles) => {
-    let flat_styles = [];
-    Object.values(styles).forEach(s => {
-      if (s.Style) { 
-        flat_styles.push(s);
-      } else if (Array.isArray(s)) {
-        s.forEach(x => flat_styles.push(x));
-      } else {
-        Object.values(s).forEach(x => flat_styles.push(x));
-      } 
-    });
-    return flat_styles;
-  };
-
-  const styles_for_header = hella_flaten_styles(styles);
+  const styles_for_header = deal_with_styling();
 
   const new_placemark = (row, style_urls) => {
     function extend_data(placemark, data) {
@@ -582,42 +590,6 @@ function get_KML(area_id, lang) {
   };
 
   const newer_placemark = (row) => new_placemark(row, style_urls);
-
-  /*
-    const row = {geometry: 'g', class_code: 3, comments: null, table: 'zones'};
-    const scary_zone = newer_placemark(row);
-    console.log(scary_zone);
-    process.exit();
-
-    const constructor_object = {
-      'zones': (row) => new_placemark(row.geometry, null, row.comments, row.class_code),
-      'areas_vw': (row) => new_placemark(row.geometry, row.name),
-      'access_roads': (row) => new_placemark(row.geometry, null, null, null, null, row.description),
-      'avalanche_paths': (row) => new_placemark(row.geometry, row.name),
-      'decision_points': (row) => new_placemark(row.geometry, row.name, row.comments, null, null, null, row.warnings),
-      'points_of_interest': (row) => new_placemark(row.geometry, row.name, row.comments, row.type)
-    };
-
-      function gen_test_placemarks() {
-        let placemarks = [];
-        placemarks.push(new_zone('g', 'comment', 1));
-        placemarks.push(new_area('g', 'area'));
-        placemarks.push(new_avalanche_path('g', 'av_path'));
-        placemarks.push(new_decision_point(
-          'g', 'scary place', 'scary', ['scary', 'real scary']
-        ));
-        placemarks.push(new_point_of_interest(
-          'g', 'cool place', 'cool', 'comment'
-        ));
-        placemarks.push(new_access_road('g', 'road'));
-
-        //console.log(placemarks);
-        //placemarks.forEach(placemark => console.log(xml(placemark)));
-        return placemarks;
-      };
-
-      const folder = new_folder('zones', gen_test_placemarks());
-  */
 
   const queries = [
     new Query(
