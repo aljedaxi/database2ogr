@@ -29,33 +29,6 @@ const names = {
 };
 
   /**
-   * @param {JSON} geometry - GeoJSON geometry object
-   * @param {string} feature_type  - the table the feature came from
-   * @param {object} properties    - properties associated with feature. Every column pulled from the table that isn't geometry.
-   */
-function Feature (geometry, feature_type, properties) {
-  this.type = "Feature";
-  this.geometry = JSON.parse(geometry);
-  if('bounding_box' in properties) { //TODO try this; if it doesn't work, remove the type:Polygon wrapper
-    this.bounding_box = properties.bounding_box;
-    delete properties.bounding_box;
-  }
-  if ('type' in properties) {
-    properties.type = properties.type.toLowerCase().replace(" ", "-");
-  }
-  this.properties = properties;
-  this.properties.table = feature_type;
-}
-
-  /**
-   * @param {Array} features - list of the features collected
-   */
-function FeatureCollection(features)  {
-  this.type = "FeatureCollection";
-  this.features = features;
-}
-
-  /**
    * @param {string} table                - table to SELECT from
    * @param {Array}  non_geometry_columns - columns that don't contain geometry
    * @param {string} where_clause         - SQL WHERE clause, eg "WHERE area_id=$1"
@@ -104,7 +77,7 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
    * @param  {Client}      client - pg {Client} object used to query the database
    * @return {Promise}              a {Feature} object for each row
    */
-function geojson_query_database(query_object, area_id, client) {
+function geojson_query_database(query_object, area_id, client, Feature) {
   /**
    * @function row_to_feature
    * @description transform a feature into an object into a row
@@ -156,11 +129,19 @@ function geojson_query_database(query_object, area_id, client) {
    * @param  {Client}  client - a pg postgresql client
    * @param  {Array}  queries - an array of {Query} objects
    */
-function promise_of_geojson(area_id, client, queries) {
+function promise_of_geojson(area_id, client, queries, Feature) {
+    /**
+     * @param {Array} features - list of the features collected
+     */
+  function FeatureCollection(features)  {
+    this.type = "FeatureCollection";
+    this.features = features;
+  }
+
   const feature_collection = new Promise((resolve, reject) => {
     let features = [];
 
-    const query_promises = queries.map((query) => geojson_query_database(query, area_id, client));
+    const query_promises = queries.map((query) => geojson_query_database(query, area_id, client, Feature));
     Promise.all(query_promises).then(values => {
       values.forEach(querys_features => querys_features.forEach(
         feature => features.push(feature)
@@ -174,6 +155,25 @@ function promise_of_geojson(area_id, client, queries) {
 }
 
 function get_geojson(area_id) {
+    /**
+     * @param {JSON} geometry - GeoJSON geometry object
+     * @param {string} feature_type  - the table the feature came from
+     * @param {object} properties    - properties associated with feature. Every column pulled from the table that isn't geometry.
+     */
+  function Feature (geometry, feature_type, properties) {
+    this.type = "Feature";
+    this.geometry = JSON.parse(geometry);
+    if('bounding_box' in properties) { //TODO try this; if it doesn't work, remove the type:Polygon wrapper
+      this.bounding_box = properties.bounding_box;
+      delete properties.bounding_box;
+    }
+    if ('type' in properties) {
+      properties.type = properties.type.toLowerCase().replace(" ", "-");
+    }
+    this.properties = properties;
+    this.properties.table = feature_type;
+  }
+
   const queries = [
     new Query(
       'areas_vw',
@@ -232,7 +232,7 @@ function get_geojson(area_id) {
   const client = new Client(); //from require('pg');
   client.connect();
 
-  promise_of_geojson(area_id, client, queries)
+  promise_of_geojson(area_id, client, queries, Feature)
     .then(r => {
       client.end();
       //TODO upload to mapbox
