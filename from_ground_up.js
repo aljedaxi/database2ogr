@@ -1,3 +1,4 @@
+'use strict';
   /*
    * @file everything to output database areas as json
    * @author jacob
@@ -54,7 +55,7 @@ function FeatureCollection(features)  {
    * @param {string} geometry_column      - column with the geometry
    * @param {Query}  subquery             - in practice, query to decision_point_warnings from inside decision_points
    */
-function Query(table, non_geometry_columns, where_clause, ogr_type, lang, bounding_box, subquery) {
+function Query(table, non_geometry_columns, where_clause, ogr_type, lang, bounding_box, subquery, geometry_column) {
   this.table = table;
   this.non_geometry_columns = non_geometry_columns;
   this.where_clause = where_clause;
@@ -653,12 +654,16 @@ function get_KML(area_id, lang) {
       'area_id=$1',
       'KML',
       lang,
-      bounding_box=false,
-      subquery=new Query(
+      false,
+      new Query(
         'decision_points_warnings',
         ['warning', 'type'],
         'decision_point_id=$1',
-        geometry_row=null
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null
       )
     ),
     new Query(
