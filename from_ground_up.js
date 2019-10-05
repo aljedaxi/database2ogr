@@ -322,7 +322,7 @@ function get_geojson(area_id) {
       client.end();
       //TODO upload to mapbox
       if (debug) {
-        console.log(JSON.stringify(r, null, 2));
+        console.log(JSON.stringify(r));
       }
     });
 }
