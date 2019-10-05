@@ -8,6 +8,7 @@
 const {Pool, Client} = require('pg');
 const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
+let geojsonhint = require('geojsonhint');
 
 
 const names = {
@@ -107,11 +108,6 @@ function geojson_query_database(query_object, area_id, client, Feature) {
   function row_to_feature(row) {
     function row_to_object(row) {
       row.table = query_object.table;
-      if (row.table == 'decision_points') {
-        //TODO get_warnings
-        warnings = get_warnings(query_object.subquery, row.id);
-        row.warnings = warnings;
-      }
       return row;
     }
     function object_to_feature(row, geometry_column) {
@@ -138,7 +134,12 @@ function geojson_query_database(query_object, area_id, client, Feature) {
   return new Promise((resolve, reject) => {
     resolve(
       client.query(query)
-        .then(res => res.rows.map(row_to_feature))
+        .then(res => {
+          if (!res) {
+            console.log(res);
+          }
+          return res.rows.map(row_to_feature)
+        })
         .catch(e => console.error(e.stack))
     );
   });
@@ -158,15 +159,69 @@ function promise_of_geojson(area_id, client, queries, Feature) {
     this.type = "FeatureCollection";
     this.features = features;
   }
+  function flatten_warnings(warnings) {
+    return JSON.stringify(warnings);
+  }
+  function warnify(features) {
+    //decompose the rows into their geometries and collect the unique ones
+    let geometries = Array.from(
+      new Set(features.map(f => f.geometry.coordinates.join(', ')))
+    );
+    geometries = geometries.map(g => g.split(', '));
+
+    const properties = {};
+    geometries.forEach(g => {
+      properties[g] = {};
+      properties[g].warnings = {
+        'managing-risk': [],
+        'concern': []
+      };
+    });
+
+    features.forEach(r => {
+      try {
+        properties[r.geometry.coordinates]['warnings'][r.properties.type].push(r.properties.warning);
+        delete(r.properties.warning);
+        delete(r.properties.type);
+        for(const key in r.properties) {
+          properties[r.geometry.coordinates][key] = r.properties[key];
+        }
+      } catch (e) {
+        console.error(e.stack);
+      } 
+    });
+
+    for (const g in properties) {
+      properties[g].warnings = flatten_warnings(properties[g].warnings)
+    }
+
+    const rows_out = geometries.map(geom => {
+      return new Feature(
+        JSON.stringify({
+          type: 'Point',
+          coordinates: geom.map(g => Number.parseFloat(g))
+        }),
+        'decision_points',
+        properties[geom]
+      );
+    });
+
+    return rows_out;
+  }
 
   const feature_collection = new Promise((resolve, reject) => {
     let features = [];
 
     const query_promises = queries.map((query) => geojson_query_database(query, area_id, client, Feature));
     Promise.all(query_promises).then(values => {
-      values.forEach(querys_features => querys_features.forEach(
-        feature => features.push(feature)
-      ));
+      values.forEach(querys_features => {
+        if (querys_features[0].properties.table === 'decision_points') {
+          querys_features = warnify(querys_features);
+        }
+        querys_features.forEach(
+          feature => features.push(feature)
+        );
+      });
       const collected_features = new FeatureCollection(features);
       resolve(collected_features);
     });
@@ -183,7 +238,14 @@ function get_geojson(area_id) {
      */
   function Feature (geometry, feature_type, properties) {
     this.type = "Feature";
-    this.geometry = JSON.parse(geometry);
+    try {
+      this.geometry = JSON.parse(geometry);
+    } catch (e) {
+      console.error('is one of your queries returning KML?');
+      console.error(this.geometry);
+      console.error(e.stack);
+      process.exit();
+    }
     if('bounding_box' in properties) { //TODO try this; if it doesn't work, remove the type:Polygon wrapper
       this.bounding_box = properties.bounding_box;
       delete properties.bounding_box;
@@ -222,23 +284,24 @@ function get_geojson(area_id) {
       'area_id=$1',
       'GeoJSON'
     ),
-    new Query(
-      'decision_points',
-      ['id', 'name', 'area_id', 'comments'],
-      'area_id=$1',
-      'GeoJSON',
-      'en',
-      false,
+    new JoinQuery(
+      new Query(
+        'decision_points',
+        ['id', 'name', 'area_id', 'comments'],
+        'area_id=$1',
+        'GeoJson',
+        'en'
+      ),
       new Query(
         'decision_points_warnings',
         ['warning', 'type'],
         'decision_point_id=$1',
         'GeoJson',
         'en',
-        false,
-        null,
-        null
-      )
+        false
+      ),
+      'decision_point_id=decision_points.id',
+      'decision_points.area_id = $1'
     ),
     new Query(
       'zones',
@@ -253,11 +316,14 @@ function get_geojson(area_id) {
   const client = new Client(); //from require('pg');
   client.connect();
 
+  const debug = true;
   promise_of_geojson(area_id, client, queries, Feature)
     .then(r => {
       client.end();
       //TODO upload to mapbox
-      console.log(JSON.stringify(r));
+      if (debug) {
+        console.log(JSON.stringify(r, null, 2));
+      }
     });
 }
 
@@ -364,31 +430,6 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
     );
   });
 }
-
-/*
-  function get_warnings(query_object, warning_id, client) {
-    function htmlitize_warnings(res) {
-      console.log("i'm here!");
-      console.log(res);
-      process.exit();
-    }
-
-    const query = {
-      name: `get errors associated with ${warning_id}`,
-      text: query_object.to_query,
-      values: [warning_id],
-    };
-
-    console.log(query);
-    return new Promise((resolve, reject) => {
-      resolve(
-        client.query(query)
-          .then(res => htmlitize_warnings(res))
-          .catch(e => console.error(e.stack))
-      );
-    });
-  }
-*/
 
 function promise_KML(area_id, client, queries, new_placemark, styles) {
   function warnify(wrapped_rows) {
@@ -525,21 +566,25 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 
     const rows = wrapped_rows.rows;
 
-    const warnings = {
-      'Managing risk': [],
-      'Concern': []
-    };
+    const geometries = Array.from(
+      new Set(rows.map(r => r.geometry.Point[0].coordinates))
+    );
+
+    const warnings = {};
+    geometries.forEach(g => {
+      warnings[g] = {
+        'Managing risk': [],
+        'Concern': []
+      }
+    });
     rows.forEach(r => {
       try {
-        warnings[r.type].push(r.warning);
+        warnings[r.geometry.Point[0].coordinates][r.type].push(r.warning);
       } catch (e) {
         console.error(e.stack);
       }
     });
     //decompose the rows into their geometries and collect the unique ones
-    const geometries = Array.from(
-      new Set(rows.map(r => r.geometry.Point[0].coordinates))
-    );
     const rows_out = geometries.map(geom => {
       return {
         geometry: {
@@ -549,7 +594,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
         },
         name: 'Decision Point',
         //TODO comments: 
-        description: htmlify(warnings),
+        description: htmlify(warnings[geom]),
         table: 'decision_points'
       };
     });
@@ -888,5 +933,5 @@ function get_KML(area_id, lang) {
   //TODO return a promise of kml which gets zipped up with the images
 }
 
-get_KML(401, 'fr');
+get_geojson(401, 'fr');
 //warnify('meme');
