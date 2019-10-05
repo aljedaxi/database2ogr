@@ -9,6 +9,7 @@ const {Pool, Client} = require('pg');
 const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
 
+
 const names = {
   en: {
     'areas_vw': 'Area',
@@ -66,6 +67,26 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
     } else {
       this.to_query = `SELECT ${this.geometry_transformation}(${this.geometry_column}) AS geometry, ${this.non_geometry_columns.join(', ')} FROM ${this.table} WHERE ${this.where_clause};`;
     }
+  }
+}
+
+function JoinQuery(query1, query2, join_on, where_clause) {
+  function join_non_geoms(query) {
+    const joined_columns_proto = query.non_geometry_columns.join(`, ${query.table}.`);
+    const joined_columns = `${query.table}.${joined_columns_proto}`;
+    return joined_columns;
+  }
+
+  const geometry_column = query1.geometry_column || query2.geometry_column;
+  const geometry_transformation = query1.geometry_transformation || query2.geometry_transformation;
+  return {
+    table: query1.table,
+    name: query1.name,
+    to_query: `SELECT ${geometry_transformation}(${geometry_column}) AS geometry,
+        ${join_non_geoms(query1)}, ${join_non_geoms(query2)}
+        FROM ${query1.table} JOIN ${query2.table} 
+          ON ${join_on}
+        WHERE ${where_clause};`
   }
 }
 
@@ -242,16 +263,13 @@ function get_geojson(area_id) {
 
 function KML_query_database(query_object, area_id, client, new_placemark) {
   /**
-   * @function row_to_feature
-   * @description transform a feature into an object into a row
-   * @return {Feature} 
-   */
+    * @function row_to_feature
+    * @description transform a feature into an object into a row
+    * @return {Feature} 
+    */
   function row_to_placemark(row, placemark_constructor) {
     function row_to_object(row) {
       row.table = query_object.table;
-      if (row.table == 'decision_points') {
-        //TODO get warnings
-      }
       return row;
     }
     function object_to_feature(row, geometry_column) {
@@ -311,33 +329,18 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
         } else if ('Polygon' in decomposed_geometry) {
           return new_polygon(decomposed_geometry.Polygon);
         } else {
-          console.error('uh'); //TODO
+          //TODO handle multigeometry
+          console.error(decomposed_geometry);
         }
       }
+
       row.geometry = new_geometry(xml_parse_string(row.geometry));
+
       if (query_object.table === 'decision_points') {
-        //console.log(row.geometry);
-        //TODO make warnings work
-        'dab'
+        return row; //i know it's bad but i can't live like this anymore
       }
-      const final_row = placemark_constructor(row);
-      /*
-      if (query_object.table === 'zones') {
-        //console.log(row.geometry);
-        //console.log(xml(final_row));
-      }
-      */
-      return final_row;
-      /*
-        feature_type = row['table'];
-        delete row[geometry_row];
-        delete row['table'];
-        return new Feature(
-          geometry,
-          feature_type,
-          row
-        );
-      */
+
+      return  placemark_constructor(row);
     }
     return object_to_feature(row_to_object(row))
   }
@@ -362,7 +365,196 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
   });
 }
 
+/*
+  function get_warnings(query_object, warning_id, client) {
+    function htmlitize_warnings(res) {
+      console.log("i'm here!");
+      console.log(res);
+      process.exit();
+    }
+
+    const query = {
+      name: `get errors associated with ${warning_id}`,
+      text: query_object.to_query,
+      values: [warning_id],
+    };
+
+    console.log(query);
+    return new Promise((resolve, reject) => {
+      resolve(
+        client.query(query)
+          .then(res => htmlitize_warnings(res))
+          .catch(e => console.error(e.stack))
+      );
+    });
+  }
+*/
+
 function promise_KML(area_id, client, queries, new_placemark, styles) {
+  function warnify(wrapped_rows) {
+    function htmlify(warnings) {
+      function tablify(warnings) {
+        const concerns = warnings['Concern'].map(c => {
+          return `<tr> <td><span class="red-x">&#x2717;</span> ${c} </td> </tr>`;
+        }).join("\n        ");
+        const risks = warnings['Managing risk'].map(r => {
+          return `<tr> <td><span class="green-check">&#x2717;</span> ${r} </td> </tr> `;
+        }).join("\n        ");
+        return `
+          <table class="orange-table">
+            <tbody>
+              <tr>
+                <th class="first">Concern</th>
+              </tr>
+              ${concerns}
+              </tr>
+              <tr>
+              <tr>
+                <th>Managing risk</th>
+              </tr>
+              ${risks}
+              <tr>
+            </tbody>
+          </table>
+        `
+      }
+
+      const table = tablify(warnings);
+      /*
+        const original_html = `
+          <![CDATA[
+            <html>
+              <head>
+                <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+
+                <style type="text/css">
+                <!--
+                  .orange-table {
+                          border: 1px solid black;
+                          background-color: #FFC000;
+                          font-size:9.0pt;
+                          padding: 10px 0;
+                          width: 333px;
+                  }
+                  
+                  .orange-table td, th {
+                    padding: 2px 10px;
+                  }
+                  
+                  .orange-table th { 
+                    font-weight: bold; 
+                    border-top: 1px solid black; 
+                    text-align: left; 
+                  }
+                  
+                  .orange-table th.first { border: none; }
+                  
+                  .green-check {
+                    color:#008A00;
+                    font-size:larger;
+                    display: block;
+                    float: left;
+                    padding-right: 4px;
+                  }
+                  .red-x {
+                    color: red;
+                    font-size: larger;
+                    display: block;
+                    float: left;
+                    padding-right: 4px;
+                  }
+                -->
+                </style>
+              </head>
+
+              <body>
+                ${table}
+              </body>
+            </html>
+          ]]>
+        `
+      */
+      //the above is the original HTML from the file mark gave me
+      //below is that, stripped to follow the google HTML style guide
+      const html = `
+        <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+
+        <style type="text/css">
+        <!--
+          .orange-table {
+                  border: 1px solid black;
+                  background-color: #FFC000;
+                  font-size:9.0pt;
+                  padding: 10px 0;
+                  width: 333px;
+          }
+          
+          .orange-table td, th {
+            padding: 2px 10px;
+          }
+          
+          .orange-table th { 
+            font-weight: bold; 
+            border-top: 1px solid black; 
+            text-align: left; 
+          }
+          
+          .orange-table th.first { border: none; }
+          
+          .green-check {
+            color:#008A00;
+            font-size:larger;
+            display: block;
+            float: left;
+            padding-right: 4px;
+          }
+          .red-x {
+            color: red;
+            font-size: larger;
+            display: block;
+            float: left;
+            padding-right: 4px;
+          }
+        -->
+        </style>
+
+        ${table}
+      `
+      return html;
+    };
+
+    const rows = wrapped_rows.rows;
+
+    const warnings = {
+      'Managing risk': [],
+      'Concern': []
+    };
+    rows.forEach(r => {
+      try {
+        warnings[r.type].push(r.warning);
+      } catch (e) {
+        console.error(e.stack);
+      }
+    });
+    //decompose the rows into their geometries and collect the unique ones
+    const geometries = Array.from(
+      new Set(rows.map(r => r.geometry.Point[0].coordinates))
+    );
+    const rows_out = geometries.map(geom => {
+      return {
+        geometry: {
+          Point: [
+            {coordinates: geom}
+          ]
+        },
+        name: 'Decision Point',
+        //TODO comments: 
+        description: htmlify(warnings),
+        table: 'decision_points'
+      };
+    });
+    return rows_out;
+  }
   function new_document(name, folders, styles) {
     let doc = folders.map(f => { return {'Folder': f }; } );
     styles.forEach(s => doc.push(s));
@@ -392,11 +584,14 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
       values.forEach(wrapped_querys_rows => {
         if (wrapped_querys_rows.table==='areas_vw') {
           doc_name = wrapped_querys_rows.rows[0][1].name;
+        } else if (wrapped_querys_rows.table==='decision_points') {
+          wrapped_querys_rows = warnify(wrapped_querys_rows);
+          wrapped_querys_rows.rows = wrapped_querys_rows.map(r => new_placemark(r));
         }
         folders.push(
           new_folder(wrapped_querys_rows.name, wrapped_querys_rows.rows, wrapped_querys_rows.table)
         );
-      })
+      });
       const KML_doc = new_document(doc_name, folders, styles);
       resolve(KML_doc);
     }).catch(e => console.error(e.stack));
@@ -408,7 +603,7 @@ function get_KML(area_id, lang) {
   lang = lang || 'en';
   const LINE_WIDTH = 3; //for LineStyles, in pixels
   const ICON_NUMBER = [11, 15][0]; //don't really know what this means 
-                                   //but there are two valid chaises: 11 and 15
+                                   //but there are two valid choices: 11 and 15
   const ICON_DIR = `files-${ICON_NUMBER}`; 
   const POI_COLOR = 'ff005dff';
 
@@ -557,8 +752,27 @@ function get_KML(area_id, lang) {
   const styles_for_header = deal_with_styling();
 
   const new_placemark = (row, style_urls) => {
-    function extend_data(placemark, data) {
-      placemark.push({'ExtendedData': data});
+    function extend_data(placemark, extension, data) {
+      let extended = 0;
+      let i = 0;
+      for (const obj of placemark) {
+        i++;
+        if ('ExtendedData' in obj) {
+          extended = i;
+          break;
+        }
+      }
+      if (extended) {
+        placemark[extended].push(
+          {[extension]: data}
+        );
+      } else {
+        placemark.push({
+          'ExtendedData': [
+            {[extension]: data}
+          ]
+        });
+      }
     }
     function describe(placemark, description) {
       placemark.push({'description': description});
@@ -590,10 +804,10 @@ function get_KML(area_id, lang) {
       styleUrl = style_urls[table][type];
     }
     if (warnings) {
-      extend_data(placemark, warnings);
+      extend_data(placemark, 'warnings', warnings);
     }
     if (class_code) {
-      extend_data(placemark, class_code);
+      extend_data(placemark, 'class_code', class_code);
       styleUrl = style_urls[table][class_code];
     }
     styleUrl = styleUrl || style_urls[table];
@@ -632,13 +846,14 @@ function get_KML(area_id, lang) {
       'KML',
       lang
     ),
-    new Query(
-      'decision_points',
-      ['id', 'name', 'comments'],
-      'area_id=$1',
-      'KML',
-      lang,
-      false,
+    new JoinQuery(
+      new Query(
+        'decision_points',
+        ['name', 'comments'],
+        'area_id=$1',
+        'KML',
+        lang
+      ),
       new Query(
         'decision_points_warnings',
         ['warning', 'type'],
@@ -648,7 +863,9 @@ function get_KML(area_id, lang) {
         undefined,
         undefined,
         null
-      )
+      ),
+      'decision_point_id=decision_points.id',
+      'decision_points.area_id = $1'
     ),
     new Query(
       'zones',
@@ -671,4 +888,5 @@ function get_KML(area_id, lang) {
   //TODO return a promise of kml which gets zipped up with the images
 }
 
-get_geojson(357, 'fr');
+get_KML(401, 'fr');
+//warnify('meme');
