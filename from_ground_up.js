@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const Readable = require('stream').Readable;
+const Writable = require('stream').Writable;
 const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
 const {Pool, Client} = require('pg');
@@ -647,10 +648,11 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
   return KML_document;
 }
 
-function get_KML(area_id, lang, client, icon_number) {
+function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
   lang = lang || 'en';
   const LINE_WIDTH = 3; //for LineStyles, in pixels
-  const ICON_DIR = `files-${icon_number}`; 
+  const ICON_DIR = `${icon_dir_name}-${icon_number}`; 
+  const ICON_EXT = 'png';
   const POI_COLOR = 'ff005dff';
 
   const style_urls = {
@@ -677,10 +679,11 @@ function get_KML(area_id, lang, client, icon_number) {
 
   const deal_with_styling = () => {
     const new_style_collection = () => {
-      const new_Icon = (icon) => {
+      const new_Icon = (icon, color) => {
         return {
           Icon: [
-            {href: `${ICON_DIR}/${icon}-${icon_number}.jpg`}
+            {href: `${ICON_DIR}/new-${icon}-${icon_number}.${ICON_EXT}`},
+            {color}
           ]
         }
       };
@@ -739,41 +742,41 @@ function get_KML(area_id, lang, client, icon_number) {
         ], 'LineStyle'),
         'decision_points': new_Style(style_urls.decision_points, [
           {color: 'ff0000ff'},
-          new_Icon('cross')
+          new_Icon('cross', 'ff0000ff')
         ], 'IconStyle'),
         'points_of_interest': {
           Other: new_Style(style_urls.points_of_interest.Other, [
             {color: POI_COLOR},
-            new_Icon('marker')
+            new_Icon('marker', POI_COLOR)
           ], 'IconStyle'),
           Parking: new_Style(style_urls.points_of_interest.Parking, [
             {color: POI_COLOR},
-            new_Icon('parking')
+            new_Icon('parking', POI_COLOR)
           ], 'IconStyle'),
           ['Rescue Cache']: new_Style(style_urls.points_of_interest['Rescue Cache'], [
             {color: POI_COLOR},
-            new_Icon('blood-bank')
+            new_Icon('blood-bank', POI_COLOR)
           ], 'IconStyle'),
           Cabin: new_Style(style_urls.points_of_interest.Cabin, [
             {color: POI_COLOR},
-            new_Icon('lodging')
+            new_Icon('lodging', POI_COLOR)
           ], 'IconStyle'),
           Destination: new_Style(style_urls.points_of_interest.Destination, [
             {color: POI_COLOR},
-            new_Icon('attraction')
+            new_Icon('attraction', POI_COLOR)
           ], 'IconStyle'),
           Lake: new_Style(style_urls.points_of_interest.Lake, [
             {color: POI_COLOR},
-            new_Icon('water')
+            new_Icon('water', POI_COLOR)
           ], 'IconStyle'),
           Mountain: new_Style(style_urls.points_of_interest.Mountain, [
             {color: POI_COLOR},
-            new_Icon('mountain')
+            new_Icon('mountain', POI_COLOR)
           ], 'IconStyle'),
         }
       };
 
-      return styles;
+      return styles; //TODO simplify
     };
     
     const styles = new_style_collection();
@@ -932,13 +935,12 @@ function get_KML(area_id, lang, client, icon_number) {
   //TODO return a promise of kml which gets zipped up with the images
 }
 
-function make_KMZ(area_id, lang, icon_number) {
-  function write_to_kmz(kml) {
+function make_KMZ_stream(area_id, lang, output_stream, icon_number, icon_dir) {
+  function write_to_kmz(kml, output) {
     const kml_stream = new Readable();
     kml_stream.push(kml);
     kml_stream.push(null);
 
-    const output = fs.createWriteStream(`./${area_id}.kmz`);
     const archive = archiver('zip', {
       zlib: {level: 9}
     });
@@ -955,8 +957,9 @@ function make_KMZ(area_id, lang, icon_number) {
     });
     archive.pipe(output);
     archive.append(kml_stream, {name: 'doc.kml'});
-    archive.directory(`files-${icon_number}/`, `files-${icon_number}`);
+    archive.directory(`${icon_dir}-${icon_number}/`, `${icon_dir}-${icon_number}`);
     archive.finalize();
+    return output;
   }
 
   const client = new Client(); //from require('pg');
@@ -967,12 +970,33 @@ function make_KMZ(area_id, lang, icon_number) {
   //11 or 15 are the two valid sizes for icons
   icon_number = icon_number || [11, 15][0]; 
   console.assert(icon_number in {11:11, 15:15});
-  get_KML(area_id, lang, client, icon_number)
-    .then(kml => {
-      client.end();
-      write_to_kmz(xml(kml));
-    });
+  icon_dir = icon_dir || 'new_files'; //TODO finalize this
+
+  //write directly to file
+  //write to stream
+  //let buff_array = [];
+  //const output = new Writable({
+  //  write(chunk, encoding, callback) {
+  //    buff_array.push(chunk);
+  //    console.log(buff_array);
+  //    callback();
+  //  }
+  //});
+
+  return new Promise((resolve, reject) => {
+    get_KML(area_id, lang, client, icon_number, icon_dir)
+      .then(kml => {
+        client.end();
+        write_to_kmz(xml(kml), output, icon_number, icon_dir);
+      });
+    resolve(output);
+  });
 }
 
-make_KMZ(401, 'fr');
+const area_id = 401;
+const output = fs.createWriteStream(`./${area_id}.kmz`);
+make_KMZ_stream(area_id, 'fr', output)
+  .then(r => {
+    console.log(r);
+  }); //TODO read the error and make it work
 //warnify('meme');
