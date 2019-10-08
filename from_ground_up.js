@@ -970,7 +970,7 @@ function make_KMZ_stream(area_id, lang, output_stream, icon_number, icon_dir) {
   //11 or 15 are the two valid sizes for icons
   icon_number = icon_number || [11, 15][0]; 
   console.assert(icon_number in {11:11, 15:15});
-  icon_dir = icon_dir || 'new_files'; //TODO finalize this
+  icon_dir = icon_dir || 'files'; //TODO finalize this
 
   //write directly to file
   //write to stream
