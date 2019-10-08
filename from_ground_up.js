@@ -15,6 +15,7 @@ const archiver = require('archiver');
 let geojsonhint = require('geojsonhint');
 
 
+//names of areas
 const names = {
   en: {
     'areas_vw': 'Area',
@@ -35,6 +36,7 @@ const names = {
 };
 
   /**
+   * @class
    * @param {string} table                - table to SELECT from
    * @param {Array}  non_geometry_columns - columns that don't contain geometry
    * @param {string} where_clause         - SQL WHERE clause, eg "WHERE area_id=$1"
@@ -56,7 +58,7 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
 
   switch(ogr_type) {
     case 'KML':
-      this.geometry_transformation = 'ST_AsKML'; //TODO check this
+      this.geometry_transformation = 'ST_AsKML';
       break;
     case 'GeoJSON':
     default:
@@ -75,7 +77,19 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
   }
 }
 
+  /**
+   * constructor for a query that involves two tables.
+   * @class
+   * @param {Query}  query1       -- the table to the joined from
+   * @param {Query}  query2       -- the table to the joined to  ??? just read this.to_query it'll make sense
+   * @param {string} join_on      -- FROM ${query1.table} JOIN ${query2.table} ON ${join_on}
+   * @param {string} where_clause -- SQL WHERE clause, without the WHERE
+   * this will probably only work for our specific use case, but i don't think it's worth it to write expansive code here
+   */
 function JoinQuery(query1, query2, join_on, where_clause) {
+    /**
+     * join non-geometry columns
+     */
   function join_non_geoms(query) {
     const joined_columns_proto = query.non_geometry_columns.join(`, ${query.table}.`);
     const joined_columns = `${query.table}.${joined_columns_proto}`;
@@ -104,11 +118,11 @@ function JoinQuery(query1, query2, join_on, where_clause) {
    * @return {Promise}              a {Feature} object for each row
    */
 function geojson_query_database(query_object, area_id, client, Feature) {
-  /**
-   * @function row_to_feature
-   * @description transform a feature into an object into a row
-   * @return {Feature} 
-   */
+    /**
+     * @function row_to_feature
+     * @description transform a row into a javascript object into a geojson feature
+     * @return {Feature} 
+     */
   function row_to_feature(row) {
     function row_to_object(row) {
       row.table = query_object.table;
@@ -166,6 +180,10 @@ function promise_of_geojson(area_id, client, queries, Feature) {
   function flatten_warnings(warnings) {
     return JSON.stringify(warnings);
   }
+    /**
+     * decomposes the garbage the database outputs into digestible warnings
+     * @returns pg rows
+     */
   function warnify(features) {
     //decompose the rows into their geometries and collect the unique ones
     let geometries = Array.from(
@@ -213,7 +231,7 @@ function promise_of_geojson(area_id, client, queries, Feature) {
     return rows_out;
   }
 
-  const feature_collection = new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     let features = [];
 
     const query_promises = queries.map((query) => geojson_query_database(query, area_id, client, Feature));
@@ -230,10 +248,11 @@ function promise_of_geojson(area_id, client, queries, Feature) {
       resolve(collected_features);
     });
   });
-
-  return feature_collection;
 }
 
+  /**
+   * prints geojson to console
+   */
 function get_geojson(area_id) {
     /**
      * @param {JSON} geometry - GeoJSON geometry object
@@ -250,7 +269,7 @@ function get_geojson(area_id) {
       console.error(e.stack);
       process.exit();
     }
-    if('bounding_box' in properties) { //TODO try this; if it doesn't work, remove the type:Polygon wrapper
+    if('bounding_box' in properties) {
       this.bounding_box = properties.bounding_box;
       delete properties.bounding_box;
     }
@@ -331,6 +350,13 @@ function get_geojson(area_id) {
     });
 }
 
+  /**
+   * @param {Query}    query_object  -- object describing the database query
+   * @param {number}   area_id       -- area_id for WHERE clause in database query
+   * @param {Client}   client        -- a require('pg') client
+   * @param {function} new_placemark -- a placemark constructor
+   * @returns {Promise} database rows, formatted using {new_placemark}
+   */
 function KML_query_database(query_object, area_id, client, new_placemark) {
   /**
     * @function row_to_feature
@@ -343,6 +369,13 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
       return row;
     }
     function object_to_feature(row, geometry_column) {
+        /**
+         * Constructor for geometry objects.
+         * @class
+         * the way the XML parser parses the geometry from the database
+         * is different from the KML pickler; this reformats the geometry
+         * for the pickler
+         */
       function new_geometry(decomposed_geometry) {
         function new_point(point) {
           return {
@@ -410,7 +443,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
         return row; //i know it's bad but i can't live like this anymore
       }
 
-      return  placemark_constructor(row);
+      return placemark_constructor(row);
     }
     return object_to_feature(row_to_object(row))
   }
@@ -435,8 +468,21 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
   });
 }
 
+  /**
+   * @param {function} new_placemark -- a placemark constructor
+   * @param {Array} styles -- see styles_for_header
+   * @returns promise of a KML document
+   */
 function promise_KML(area_id, client, queries, new_placemark, styles) {
+    /**
+     * decomposes the garbage the database outputs into digestible warnings
+     * @returns pg rows
+     */
   function warnify(wrapped_rows) {
+      /** 
+       * takes the warning parts of the warnings and wraps them in an HTML table
+       * @returns {string} an HTML table , following the google style guide
+       */
     function htmlify(warnings) {
       function tablify(warnings) {
         const concerns = warnings['Concern'].map(c => {
@@ -570,6 +616,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 
     const rows = wrapped_rows.rows;
 
+    //finds which warnings have unique coords
     const geometries = Array.from(
       new Set(rows.map(r => r.geometry.Point[0].coordinates))
     );
@@ -624,7 +671,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
     folder.push({name});
     return folder;
   }
-  const KML_document = new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     let folders = [];
     let doc_name = '';
 
@@ -645,9 +692,16 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
       resolve(KML_doc);
     }).catch(e => console.error(e.stack));
   });
-  return KML_document;
 }
 
+  /**
+   * @param {number} area_id       -- id of the area whose features you want to query.
+   * @param {string} lang          -- either 'en' (English) or 'fr' (French).
+   * @param {number} icon_number   -- either 11 or 15; the number associated with the icons. don't know what it means.
+   * @param {string} icon_dir_name -- the prefix for the directory that contains the icons.
+   * contains all the preprocessing necessary to run {promise_KML}
+   * @returns {Promise} promise_KML
+   */
 function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
   lang = lang || 'en';
   const LINE_WIDTH = 3; //for LineStyles, in pixels
@@ -678,108 +732,106 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
   };
 
   const deal_with_styling = () => {
-    const new_style_collection = () => {
-      const new_Icon = (icon, color) => {
-        return {
-          Icon: [
-            {href: `${ICON_DIR}/new-${icon}-${icon_number}.${ICON_EXT}`},
-            {color}
-          ]
-        }
-      };
+    const new_Icon = (icon, color) => {
+      return {
+        Icon: [
+          {href: `${ICON_DIR}/new-${icon}-${icon_number}.${ICON_EXT}`},
+          {color}
+        ]
+      }
+    };
 
-      const new_Style = (url, styles, style_type) => { 
-        const reverse = (s) => s.split("").reverse().join("");
-        const basic_style = (style_type, default_stylings) => {
-          return (styles) => {
-            //KML uses aabbggrr hex codes, unlike the rest of the civilized world,
-            //which uses rrggbbaa. red green blue alpha/transparency
-            const re_colored_styles = styles.map(s => ('color' in s) ? {color: reverse(s.color)} : s);
-            return {
-              [style_type]: [
-                ...default_stylings,
-                ...re_colored_styles
-              ]
-            };
+      /**
+       * constructor for KML Style tags
+       * @class
+       */
+    const new_Style = (url, styles, style_type) => { 
+      const reverse = (s) => s.split("").reverse().join("");
+      const basic_style = (style_type, default_stylings) => {
+        return (styles) => {
+          //KML uses aabbggrr hex codes, unlike the rest of the civilized world,
+          //which uses rrggbbaa. red green blue alpha/transparency
+          const re_colored_styles = styles.map(s => ('color' in s) ? {color: reverse(s.color)} : s);
+          return {
+            [style_type]: [
+              ...default_stylings,
+              ...re_colored_styles
+            ]
           };
         };
-        const style_types = {
-          LineStyle: basic_style('LineStyle', [ {width: LINE_WIDTH} ]),
-          PolyStyle: basic_style('PolyStyle', []),
-          IconStyle: basic_style('IconStyle', [])
-        };
-
-        return {
-          'Style': [
-            {'_attr': {'id': url}},
-            style_types[style_type](styles)
-          ]
-        };
-      }
-
-      const styles = {
-        'zones' : [
-          new_Style(style_urls.zones[1], [
-            {color: '55ff0088'} //green
-          ], 'PolyStyle'),
-          new_Style(style_urls.zones[2], [
-            {color: '0000ff88'} //blue
-          ], 'PolyStyle'),
-          new_Style(style_urls.zones[3], [
-            {color: '00000088'} //black
-          ], 'PolyStyle')
-        ],
-        'areas_vw': new_Style(style_urls.areas_vw, [
-          {color: '00000000'} //fully transparent
-        ], 'PolyStyle'),
-        'access_roads': new_Style(style_urls.access_roads, [
-          {color: 'ffff00ff'}, //yellow
-          {'gx:outerColor': 'ff00ff00'}, //green
-          {'gx:outerWidth': LINE_WIDTH + 5} //TODO isn't working but isn't important
-        ], 'LineStyle'),
-        'avalanche_paths': new_Style(style_urls.avalanche_paths, [
-          {color: 'ff0000ff'}
-        ], 'LineStyle'),
-        'decision_points': new_Style(style_urls.decision_points, [
-          {color: 'ff0000ff'},
-          new_Icon('cross', 'ff0000ff')
-        ], 'IconStyle'),
-        'points_of_interest': {
-          Other: new_Style(style_urls.points_of_interest.Other, [
-            {color: POI_COLOR},
-            new_Icon('marker', POI_COLOR)
-          ], 'IconStyle'),
-          Parking: new_Style(style_urls.points_of_interest.Parking, [
-            {color: POI_COLOR},
-            new_Icon('parking', POI_COLOR)
-          ], 'IconStyle'),
-          ['Rescue Cache']: new_Style(style_urls.points_of_interest['Rescue Cache'], [
-            {color: POI_COLOR},
-            new_Icon('blood-bank', POI_COLOR)
-          ], 'IconStyle'),
-          Cabin: new_Style(style_urls.points_of_interest.Cabin, [
-            {color: POI_COLOR},
-            new_Icon('lodging', POI_COLOR)
-          ], 'IconStyle'),
-          Destination: new_Style(style_urls.points_of_interest.Destination, [
-            {color: POI_COLOR},
-            new_Icon('attraction', POI_COLOR)
-          ], 'IconStyle'),
-          Lake: new_Style(style_urls.points_of_interest.Lake, [
-            {color: POI_COLOR},
-            new_Icon('water', POI_COLOR)
-          ], 'IconStyle'),
-          Mountain: new_Style(style_urls.points_of_interest.Mountain, [
-            {color: POI_COLOR},
-            new_Icon('mountain', POI_COLOR)
-          ], 'IconStyle'),
-        }
+      };
+      const style_types = {
+        LineStyle: basic_style('LineStyle', [ {width: LINE_WIDTH} ]),
+        PolyStyle: basic_style('PolyStyle', []),
+        IconStyle: basic_style('IconStyle', [])
       };
 
-      return styles; //TODO simplify
+      return {
+        'Style': [
+          {'_attr': {'id': url}},
+          style_types[style_type](styles)
+        ]
+      };
+    }
+
+    const styles = {
+      'zones' : [
+        new_Style(style_urls.zones[1], [
+          {color: '55ff0088'} //green
+        ], 'PolyStyle'),
+        new_Style(style_urls.zones[2], [
+          {color: '0000ff88'} //blue
+        ], 'PolyStyle'),
+        new_Style(style_urls.zones[3], [
+          {color: '00000088'} //black
+        ], 'PolyStyle')
+      ],
+      'areas_vw': new_Style(style_urls.areas_vw, [
+        {color: '00000000'} //fully transparent
+      ], 'PolyStyle'),
+      'access_roads': new_Style(style_urls.access_roads, [
+        {color: 'ffff00ff'}, //yellow
+        {'gx:outerColor': 'ff00ff00'}, //green
+        {'gx:outerWidth': LINE_WIDTH + 5} //TODO isn't working but isn't important
+      ], 'LineStyle'),
+      'avalanche_paths': new_Style(style_urls.avalanche_paths, [
+        {color: 'ff0000ff'}
+      ], 'LineStyle'),
+      'decision_points': new_Style(style_urls.decision_points, [
+        {color: 'ff0000ff'},
+        new_Icon('cross', 'ff0000ff')
+      ], 'IconStyle'),
+      'points_of_interest': {
+        Other: new_Style(style_urls.points_of_interest.Other, [
+          {color: POI_COLOR},
+          new_Icon('marker', POI_COLOR)
+        ], 'IconStyle'),
+        Parking: new_Style(style_urls.points_of_interest.Parking, [
+          {color: POI_COLOR},
+          new_Icon('parking', POI_COLOR)
+        ], 'IconStyle'),
+        ['Rescue Cache']: new_Style(style_urls.points_of_interest['Rescue Cache'], [
+          {color: POI_COLOR},
+          new_Icon('blood-bank', POI_COLOR)
+        ], 'IconStyle'),
+        Cabin: new_Style(style_urls.points_of_interest.Cabin, [
+          {color: POI_COLOR},
+          new_Icon('lodging', POI_COLOR)
+        ], 'IconStyle'),
+        Destination: new_Style(style_urls.points_of_interest.Destination, [
+          {color: POI_COLOR},
+          new_Icon('attraction', POI_COLOR)
+        ], 'IconStyle'),
+        Lake: new_Style(style_urls.points_of_interest.Lake, [
+          {color: POI_COLOR},
+          new_Icon('water', POI_COLOR)
+        ], 'IconStyle'),
+        Mountain: new_Style(style_urls.points_of_interest.Mountain, [
+          {color: POI_COLOR},
+          new_Icon('mountain', POI_COLOR)
+        ], 'IconStyle'),
+      }
     };
-    
-    const styles = new_style_collection();
 
     const flatten_styles = (styles) => {
       let flat_styles = [];
@@ -876,7 +928,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
     ),
     new Query(
       'points_of_interest',
-      ['name', 'type', 'comments'], //TODO lowercase and dasherize type
+      ['name', 'type', 'comments'],
       'area_id=$1',
       'KML',
       lang
@@ -926,15 +978,14 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
   ];
 
   return promise_KML(area_id, client, queries, newer_placemark, styles_for_header)
-  /*
-    .then(r => {
-      client.end();
-      if (debug) { console.log(xml(r)); }
-    });
-  */
-  //TODO return a promise of kml which gets zipped up with the images
 }
 
+  /**
+   * @param {number} icon_number     -- either 11 or 15; the number associated with the icons. don't know what it means.
+   * @param {string} icon_dir        -- the prefix for the directory that contains the icons.
+   * @param {Writable} output_stream -- stream to which the KMZ is written
+   * @returns {Writable} output_stream, the same one as the input
+   */
 function make_KMZ_stream(area_id, lang, output_stream, icon_number, icon_dir) {
   function write_to_kmz(kml, output) {
     const kml_stream = new Readable();
@@ -970,9 +1021,11 @@ function make_KMZ_stream(area_id, lang, output_stream, icon_number, icon_dir) {
   //11 or 15 are the two valid sizes for icons
   icon_number = icon_number || [11, 15][0]; 
   console.assert(icon_number in {11:11, 15:15});
-  icon_dir = icon_dir || 'files'; //TODO finalize this
+  icon_dir = icon_dir || 'files'; 
+  console.assert(lang in {'en':'en', 'fr':'fr'});
 
   //write directly to file
+  //const output = fs.createWriteStream(`./${area_id}.kmz`);
   //write to stream
   //let buff_array = [];
   //const output = new Writable({
@@ -998,5 +1051,5 @@ const output = fs.createWriteStream(`./${area_id}.kmz`);
 make_KMZ_stream(area_id, 'fr', output)
   .then(r => {
     console.log(r);
-  }); //TODO read the error and make it work
+  }); 
 //warnify('meme');
