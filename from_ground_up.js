@@ -5,9 +5,12 @@
    * @version 0.1
    */
 
-const {Pool, Client} = require('pg');
+const fs = require('fs');
+const Readable = require('stream').Readable;
 const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
+const {Pool, Client} = require('pg');
+const archiver = require('archiver');
 let geojsonhint = require('geojsonhint');
 
 
@@ -644,12 +647,10 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
   return KML_document;
 }
 
-function get_KML(area_id, lang) {
+function get_KML(area_id, lang, client, icon_number) {
   lang = lang || 'en';
   const LINE_WIDTH = 3; //for LineStyles, in pixels
-  const ICON_NUMBER = [11, 15][0]; //don't really know what this means 
-                                   //but there are two valid choices: 11 and 15
-  const ICON_DIR = `files-${ICON_NUMBER}`; 
+  const ICON_DIR = `files-${icon_number}`; 
   const POI_COLOR = 'ff005dff';
 
   const style_urls = {
@@ -679,7 +680,7 @@ function get_KML(area_id, lang) {
       const new_Icon = (icon) => {
         return {
           Icon: [
-            {href: `${ICON_DIR}/${icon}-${ICON_NUMBER}.jpg`}
+            {href: `${ICON_DIR}/${icon}-${icon_number}.jpg`}
           ]
         }
       };
@@ -921,17 +922,57 @@ function get_KML(area_id, lang) {
     )
   ];
 
-  const client = new Client(); //from require('pg');
-  client.connect();
-
-  const debug = true;
-  promise_KML(area_id, client, queries, newer_placemark, styles_for_header)
+  return promise_KML(area_id, client, queries, newer_placemark, styles_for_header)
+  /*
     .then(r => {
       client.end();
       if (debug) { console.log(xml(r)); }
     });
+  */
   //TODO return a promise of kml which gets zipped up with the images
 }
 
-get_geojson(401, 'fr');
+function make_KMZ(area_id, lang, icon_number) {
+  function write_to_kmz(kml) {
+    const kml_stream = new Readable();
+    kml_stream.push(kml);
+    kml_stream.push(null);
+
+    const output = fs.createWriteStream(`./${area_id}.kmz`);
+    const archive = archiver('zip', {
+      zlib: {level: 9}
+    });
+    archive.on('warning', err => {
+      if (err.code === 'ENOENT') {
+        console.error(err);
+      } else {
+        throw err;
+      }
+    });
+    archive.on('error', err => {
+      console.log(err);
+      throw err;
+    });
+    archive.pipe(output);
+    archive.append(kml_stream, {name: 'doc.kml'});
+    archive.directory(`files-${icon_number}/`, `files-${icon_number}`);
+    archive.finalize();
+  }
+
+  const client = new Client(); //from require('pg');
+  client.connect();
+
+  const debug = true;
+
+  //11 or 15 are the two valid sizes for icons
+  icon_number = icon_number || [11, 15][0]; 
+  console.assert(icon_number in {11:11, 15:15});
+  get_KML(area_id, lang, client, icon_number)
+    .then(kml => {
+      client.end();
+      write_to_kmz(xml(kml));
+    });
+}
+
+make_KMZ(401, 'fr');
 //warnify('meme');
