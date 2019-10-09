@@ -13,14 +13,12 @@
 	 //never used this and rarely used new. I think the only code that uses this
 	 //is Query, because i didn't care enough to fully port it.
 
-const fs = require('fs');
 const Readable = require('stream').Readable;
-const Writable = require('stream').Writable;
 const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
-const {Pool, Client} = require('pg');
+const Client = require('pg').Client;
 const archiver = require('archiver');
-let geojsonhint = require('geojsonhint');
+//let geojsonhint = require('geojsonhint');
 
 
 	//object mapping from languages to database tables to the names presented to the user
@@ -427,7 +425,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 			row.table = query_object.table;
 			return row;
 		}
-		function object_to_feature(row, geometry_column) {
+		function object_to_feature(row) {
 				/**
 				 * Constructor for geometry objects.
 				 * @class
@@ -725,7 +723,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			] 
 		} ];
 	}
-	function new_folder(name, features, table) {
+	function new_folder(name, features) {
 		let folder = features.map(f => {
 			return {'Placemark': f};
 		});
@@ -746,7 +744,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 					wrapped_querys_rows.rows = wrapped_querys_rows.map(r => new_placemark(r));
 				}
 				folders.push(
-					new_folder(wrapped_querys_rows.name, wrapped_querys_rows.rows, wrapped_querys_rows.table)
+					new_folder(wrapped_querys_rows.name, wrapped_querys_rows.rows)
 				);
 			});
 			const KML_doc = new_document(doc_name, folders, styles);
