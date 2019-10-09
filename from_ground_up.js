@@ -1097,10 +1097,11 @@ function make_KMZ_stream(area_id, lang, output_stream, icon_number, icon_dir) {
 }
 
 const area_id = 401;
-const Duplex = require('stream').Duplex;
-const http = require('http');
-const server = http.createServer( (req, res, next) => {
-  res.setHeader('Content-Type', 'application/vnd.google-earth.kmz');
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+  res.attachment(`${area_id}.kmz`);
   const output = res;
   make_KMZ_stream(area_id, 'fr', output)
     .then(r => {
@@ -1108,5 +1109,4 @@ const server = http.createServer( (req, res, next) => {
     }); 
 });
 
-server.listen(3000);
-//warnify('meme');
+app.listen(3000);
