@@ -253,6 +253,7 @@ function promise_of_geojson(area_id, client, queries, Feature) {
 /*
 function upload_to_mapbox(geojson_doc, area_id) {
   const MY_ACCESS_TOKEN = 'testest'; //TODO
+  const USERNAME = 'testest'; //TODO
   const AWS = require('aws-sdk'); //TODO move to top
   const mbxUploads = require('@mapbox/mapbox-sdk/services/uploads');
   const uploadsClient = mbxClient({accessToken: MY_ACCESS_TOKEN});
@@ -704,13 +705,15 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
   function new_document(name, folders, styles) {
     let doc = folders.map(f => { return {'Folder': f }; } );
     styles.forEach(s => doc.push(s));
+    doc.push({name})
     return [ {
       'kml': [
         {'_attr': {
           'xmlns':    "http://www.opengis.net/kml/2.2",
           'xmlns:gx': "http://www.google.com/kml/ext/2.2" 
         } },
-        {'Document': doc} 
+        {'Document': doc},
+        {name}
       ] 
     } ];
   }
@@ -1036,7 +1039,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
    * @param {Writable} output_stream -- stream to which the KMZ is written
    * @returns {Writable} output_stream, the same one as the input
    */
-function make_KMZ_stream(area_id, lang, output_stream, icon_number, icon_dir) {
+function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_dir) {
   function write_to_kmz(kml, output) {
     const kml_stream = new Readable();
     kml_stream.push(kml);
@@ -1090,6 +1093,7 @@ function make_KMZ_stream(area_id, lang, output_stream, icon_number, icon_dir) {
     get_KML(area_id, lang, client, icon_number, icon_dir)
       .then(kml => {
         client.end();
+        res.attachment(`${kml[0].kml[2].name}.kmz`)
         write_to_kmz(xml(kml), output_stream, icon_number, icon_dir);
       });
     resolve(output_stream);
@@ -1103,7 +1107,7 @@ const app = express();
 app.get('/', (req, res) => {
   res.attachment(`${area_id}.kmz`);
   const output = res;
-  make_KMZ_stream(area_id, 'fr', output)
+  make_KMZ_stream(area_id, 'fr', output, res)
     .then(r => {
       console.log(r);
     }); 
