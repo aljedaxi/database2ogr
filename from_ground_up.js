@@ -757,7 +757,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
   const LINE_WIDTH = 3; //for LineStyles, in pixels
   const ICON_DIR = `${icon_dir_name}-${icon_number}`; 
   const ICON_EXT = 'png';
-  const POI_COLOR = 'ff005dff';
+  const POI_COLOR = '000000ff';
 
   const style_urls = {
     'zones': [
@@ -1090,16 +1090,23 @@ function make_KMZ_stream(area_id, lang, output_stream, icon_number, icon_dir) {
     get_KML(area_id, lang, client, icon_number, icon_dir)
       .then(kml => {
         client.end();
-        write_to_kmz(xml(kml), output, icon_number, icon_dir);
+        write_to_kmz(xml(kml), output_stream, icon_number, icon_dir);
       });
-    resolve(output);
+    resolve(output_stream);
   });
 }
 
 const area_id = 401;
-const output = fs.createWriteStream(`./${area_id}.kmz`);
-make_KMZ_stream(area_id, 'fr', output)
-  .then(r => {
-    console.log(r);
-  }); 
+const Duplex = require('stream').Duplex;
+const http = require('http');
+const server = http.createServer( (req, res, next) => {
+  res.setHeader('Content-Type', 'application/vnd.google-earth.kmz');
+  const output = res;
+  make_KMZ_stream(area_id, 'fr', output)
+    .then(r => {
+      console.log(r);
+    }); 
+});
+
+server.listen(3000);
 //warnify('meme');
