@@ -250,6 +250,56 @@ function promise_of_geojson(area_id, client, queries, Feature) {
   });
 }
 
+/*
+function upload_to_mapbox(geojson_doc, area_id) {
+  const MY_ACCESS_TOKEN = 'testest'; //TODO
+  const AWS = require('aws-sdk'); //TODO move to top
+  const mbxUploads = require('@mapbox/mapbox-sdk/services/uploads');
+  const uploadsClient = mbxClient({accessToken: MY_ACCESS_TOKEN});
+  const region = 'us-east-1';
+  const geojson_stream = new Readable();
+  geojson_stream.push(geojson_doc);
+  geojson_stream.push(null);
+
+  const getCredentials = () => {
+    return uploadsClient
+      .createUploadCredentials()
+      .send()
+      .then(response => response.body);
+  };
+
+  const putFileOnS3 = (credentials) => {
+    const s3 = new AWS.S3({
+      accessKeyId = credentials.accessKeyId,
+      secretAccessKey = credentials.secretAccessKey,
+      sessionToken = credentials.sessionToken,
+      region: REGION
+    });
+    return s3.putObject({
+      Bucket: credentials.bucket,
+      Key: credentials.key,
+      //Body: fs.createReadStream(GEOJSON_FILE_PATH)
+      Body: geojson_stream
+    }).promise();
+  };
+
+  getCredentials()
+    .then(creds => {
+      putFileOnS3(creds)
+        .then(dunno => {
+          uploadsClient.createUpload({
+            mapId: `${USERNAME}.${area_id}`, //TODO
+            url: creds.url
+          })
+            .send()
+            .then(response => {
+              const upload = response.body;
+            });
+        });
+    }); //test for failure
+}
+*/
+
   /**
    * prints geojson to console
    */
@@ -341,11 +391,11 @@ function get_geojson(area_id) {
 
   const debug = true;
   promise_of_geojson(area_id, client, queries, Feature)
-    .then(r => {
+    .then(geoJsonDoc => {
       client.end();
       //TODO upload to mapbox
       if (debug) {
-        console.log(JSON.stringify(r));
+        console.log(JSON.stringify(geoJsonDoc));
       }
     });
 }
@@ -816,7 +866,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
         ], 'IconStyle'),
         Cabin: new_Style(style_urls.points_of_interest.Cabin, [
           {color: POI_COLOR},
-          new_Icon('lodging', POI_COLOR)
+          new_Icon('shelter', POI_COLOR)
         ], 'IconStyle'),
         Destination: new_Style(style_urls.points_of_interest.Destination, [
           {color: POI_COLOR},
