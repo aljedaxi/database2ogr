@@ -1,9 +1,17 @@
-'use strict';
-  /*
+'use strict'
+
+  /**
    * @file everything to output database areas as json
    * @author jacob
    * @version 0.1
    */
+   //jsdoc comments are extra indented because i use indent folding in vi 
+   //and i don't want to see the documentation without explicitly unfolding it
+
+   //after i was told not to use classes, i did some research on the proper, 
+   //`javascript' way of doing things; and was told that the gods of yore
+   //never used this and rarely used new. I think the only code that uses this
+   //is Query, because i didn't care enough to fully port it.
 
 const fs = require('fs');
 const Readable = require('stream').Readable;
@@ -15,7 +23,7 @@ const archiver = require('archiver');
 let geojsonhint = require('geojsonhint');
 
 
-//names of areas
+  //object mapping from languages to database tables to the names presented to the user
 const names = {
   en: {
     'areas_vw': 'Area',
@@ -106,7 +114,7 @@ function JoinQuery(query1, query2, join_on, where_clause) {
         FROM ${query1.table} JOIN ${query2.table} 
           ON ${join_on}
         WHERE ${where_clause};`
-  }
+  };
 }
 
   /**
@@ -784,6 +792,11 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
     }
   };
 
+    /**
+     * i had to write an ungodly amount of code to deal with styling
+     * this function is here to hide all that
+     * @returns {Array} returns an array of Style objects
+     */
   const deal_with_styling = () => {
     const new_Icon = (icon, color) => {
       return {
@@ -827,6 +840,8 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
       };
     }
 
+    //any color in here is formatted rrggbbaa
+    //new_Style reverses it for kml
     const styles = {
       'zones' : [
         new_Style(style_urls.zones[1], [
