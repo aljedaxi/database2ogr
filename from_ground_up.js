@@ -5,23 +5,23 @@
 	 * @author jacob
 	 * @version 0.1
 	 */
-	 //jsdoc comments are extra indented because i use indent folding in vi 
-	 //and i don't want to see the documentation without explicitly unfolding it
+	 // jsdoc comments are extra indented because i use indent folding in vi
+	 // and i don't want to see the documentation without explicitly unfolding it
 
-	 //after i was told not to use classes, i did some research on the proper, 
-	 //`javascript' way of doing things; and was told that the gods of yore
-	 //never used this and rarely used new. I think the only code that uses this
-	 //is Query, because i didn't care enough to fully port it.
+	 // after i was told not to use classes, i did some research on the proper,
+	 // `javascript' way of doing things; and was told that the gods of yore
+	 // never used this and rarely used new. I think the only code that uses this
+	 // is Query, because i didn't care enough to fully port it.
 
-const Readable = require('stream').Readable;
+const {Readable} = require('stream');
 const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
-const Client = require('pg').Client;
+const {Client} = require('pg');
 const archiver = require('archiver');
-//let geojsonhint = require('geojsonhint');
+// let geojsonhint = require('geojsonhint');
 
 
-	//object mapping from languages to database tables to the names presented to the user
+	/** object mapping from languages to database tables to the names presented to the user */
 const names = {
 	en: {
 		'areas_vw': 'Area',
@@ -57,7 +57,7 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
 	this.ogr_type = ogr_type;
 	this.geometry_column = (typeof geometry_column === 'null') ? null : 'geom';
 	this.bounding_box = typeof bounding_box !== 'undefined' ? bounding_box : false;
-	this.lang = typeof lang !== 'undefined' ? lang : 'en';
+	letletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletletthis.lang = typeof lang !== 'undefined' ? lang : 'en';
 	this.name = names[this.lang][table];
 	this.geometry_transformation;
 	this.to_query;
@@ -127,13 +127,14 @@ function geojson_query_database(query_object, area_id, client, Feature) {
 		/**
 		 * @function row_to_feature
 		 * @description transform a row into a javascript object into a geojson feature
-		 * @return {Feature} 
+		 * @return {Feature}
 		 */
 	function row_to_feature(row) {
 		function row_to_object(row) {
 			row.table = query_object.table;
 			return row;
 		}
+
 		function object_to_feature(row, geometry_column) {
 			geometry_column = geometry_column || 'geometry';
 			const geometry = row[geometry_column];
@@ -146,6 +147,7 @@ function geojson_query_database(query_object, area_id, client, Feature) {
 				row
 			);
 		}
+
 		return object_to_feature(row_to_object(row));
 	}
 
@@ -159,9 +161,7 @@ function geojson_query_database(query_object, area_id, client, Feature) {
 		resolve(
 			client.query(query)
 				.then(res => {
-					if (!res) {
-						console.log(res);
-					}
+					if (!res) console.log(res);
 					return res.rows.map(row_to_feature);
 				})
 				.catch(e => console.error(e.stack))
@@ -183,6 +183,7 @@ function promise_of_geojson(area_id, client, queries, Feature) {
 		this.type = "FeatureCollection";
 		this.features = features;
 	}
+
 	function flatten_warnings(warnings) {
 		return JSON.stringify(warnings);
 	}
@@ -190,6 +191,7 @@ function promise_of_geojson(area_id, client, queries, Feature) {
 		 * decomposes the garbage the database outputs into digestible warnings
 		 * @returns pg rows
 		 */
+
 	function warnify(features) {
 		//decompose the rows into their geometries and collect the unique ones
 		let geometries = Array.from(
@@ -216,7 +218,7 @@ function promise_of_geojson(area_id, client, queries, Feature) {
 				}
 			} catch (e) {
 				console.error(e.stack);
-			} 
+			}
 		});
 
 		for (const g in properties) {
@@ -238,7 +240,7 @@ function promise_of_geojson(area_id, client, queries, Feature) {
 	}
 
 	return new Promise((resolve, reject) => {
-		let features = [];
+		const features = [];
 
 		const query_promises = queries.map((query) => geojson_query_database(query, area_id, client, Feature));
 		Promise.all(query_promises).then(values => {
@@ -246,6 +248,7 @@ function promise_of_geojson(area_id, client, queries, Feature) {
 				if (querys_features[0].properties.table === 'decision_points') {
 					querys_features = warnify(querys_features);
 				}
+
 				querys_features.forEach(
 					feature => features.push(feature)
 				);
@@ -326,13 +329,16 @@ function get_geojson(area_id) {
 			console.error(e.stack);
 			process.exit();
 		}
+
 		if('bounding_box' in properties) {
 			this.bounding_box = properties.bounding_box;
 			delete properties.bounding_box;
 		}
+
 		if ('type' in properties) {
 			properties.type = properties.type.toLowerCase().replace(" ", "-");
 		}
+
 		this.properties = properties;
 		this.properties.table = feature_type;
 	}
@@ -418,13 +424,14 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 	/**
 		* @function row_to_feature
 		* @description transform a feature into an object into a row
-		* @return {Feature} 
+		* @return {Feature}
 		*/
 	function row_to_placemark(row, placemark_constructor) {
 		function row_to_object(row) {
 			row.table = query_object.table;
 			return row;
 		}
+
 		function object_to_feature(row) {
 				/**
 				 * Constructor for geometry objects.
@@ -441,6 +448,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 						]
 					};
 				}
+
 				function new_linestring(line_string) {
 					return {
 						'LineString': [
@@ -448,15 +456,16 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 						]
 					};
 				}
+
 				function new_polygon(polygon) {
-					let general_polygon = {
-						'Polygon': [ {
-							'outerBoundaryIs': [
-								 {'LinearRing': [ 
-										 {coordinates: polygon.outerBoundaryIs.LinearRing.coordinates} ] 
-								 } ]
-							 }
-						]
+					const general_polygon = {
+						'Polygon': [{
+							'outerBoundaryIs': [{
+								'LinearRing': [
+									{coordinates: polygon.outerBoundaryIs.LinearRing.coordinates}
+								]
+							}]
+						}]
 					};
 
 					if(polygon.innerBoundaryIs) {
@@ -471,17 +480,19 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 							});
 						} catch (err) {
 							inner_boundaries = [
-								{ LinearRing: [
+								{LinearRing: [
 									{coordinates: polygon.innerBoundaryIs.LinearRing.coordinates}
-								] }
+								]}
 							];
 						}
+
 						general_polygon.Polygon.push({innerBoundaryIs: inner_boundaries});
 						return general_polygon;
 					} else {
 						return general_polygon;
 					}
 				}
+
 				if ('Point' in decomposed_geometry) {
 					return new_point(decomposed_geometry.Point);
 				} else if ('LineString' in decomposed_geometry) {
@@ -502,6 +513,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 
 			return placemark_constructor(row);
 		}
+
 		return object_to_feature(row_to_object(row));
 	}
 
@@ -514,7 +526,8 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 	return new Promise((resolve, reject) => {
 		resolve(
 			client.query(query)
-				.then(res => { return {
+				.then(res => { 
+					return {
 						'table': query_object.table,
 						'name': query_object.name,
 						'rows': res.rows.map(row => row_to_placemark(row, new_placemark))
@@ -536,7 +549,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 		 * @returns pg rows
 		 */
 	function warnify(wrapped_rows) {
-			/** 
+			/**
 			 * takes the warning parts of the warnings and wraps them in an HTML table
 			 * @returns {string} an HTML table , following the google style guide
 			 */
@@ -568,62 +581,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			}
 
 			const table = tablify(warnings);
-			/*
-				const original_html = `
-					<![CDATA[
-						<html>
-							<head>
-								<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
 
-								<style type="text/css">
-								<!--
-									.orange-table {
-													border: 1px solid black;
-													background-color: #FFC000;
-													font-size:9.0pt;
-													padding: 10px 0;
-													width: 333px;
-									}
-									
-									.orange-table td, th {
-										padding: 2px 10px;
-									}
-									
-									.orange-table th { 
-										font-weight: bold; 
-										border-top: 1px solid black; 
-										text-align: left; 
-									}
-									
-									.orange-table th.first { border: none; }
-									
-									.green-check {
-										color:#008A00;
-										font-size:larger;
-										display: block;
-										float: left;
-										padding-right: 4px;
-									}
-									.red-x {
-										color: red;
-										font-size: larger;
-										display: block;
-										float: left;
-										padding-right: 4px;
-									}
-								-->
-								</style>
-							</head>
-
-							<body>
-								${table}
-							</body>
-						</html>
-					]]>
-				`
-			*/
-			//the above is the original HTML from the file mark gave me
-			//below is that, stripped to follow the google HTML style guide
 			const html = `
 				<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
 
@@ -668,10 +626,11 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 
 				${table}
 			`;
-			return html;
-		};
 
-		const rows = wrapped_rows.rows;
+			return html;
+		}
+
+		const {rows} = wrapped_rows;
 
 		//finds which warnings have unique coords
 		const geometries = Array.from(
@@ -701,37 +660,42 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 					]
 				},
 				name: 'Decision Point',
-				//TODO comments: 
+				//TODO comments:
 				description: htmlify(warnings[geom]),
 				table: 'decision_points'
 			};
 		});
 		return rows_out;
 	}
+
 	function new_document(name, folders, styles) {
-		let doc = folders.map(f => { return {'Folder': f }; } );
+		const doc = folders.map(f => { 
+			return {'Folder': f}; 
+		});
 		styles.forEach(s => doc.push(s));
 		doc.push({name});
-		return [ {
+		return [{
 			'kml': [
 				{'_attr': {
 					'xmlns':		"http://www.opengis.net/kml/2.2",
-					'xmlns:gx': "http://www.google.com/kml/ext/2.2" 
-				} },
+					'xmlns:gx': "http://www.google.com/kml/ext/2.2"
+				}},
 				{'Document': doc},
 				{name}
-			] 
-		} ];
+			]
+		}];
 	}
+
 	function new_folder(name, features) {
-		let folder = features.map(f => {
+		const folder = features.map(f => {
 			return {'Placemark': f};
 		});
 		folder.push({name});
 		return folder;
 	}
+
 	return new Promise((resolve, reject) => {
-		let folders = [];
+		const folders = [];
 		let doc_name = '';
 
 		const query_promises = queries.map(query => KML_query_database(query, area_id, client, new_placemark));
@@ -743,6 +707,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 					wrapped_querys_rows = warnify(wrapped_querys_rows);
 					wrapped_querys_rows.rows = wrapped_querys_rows.map(r => new_placemark(r));
 				}
+
 				folders.push(
 					new_folder(wrapped_querys_rows.name, wrapped_querys_rows.rows)
 				);
@@ -764,7 +729,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 	lang = lang || 'en';
 	const LINE_WIDTH = 3; //for LineStyles, in pixels
-	const ICON_DIR = `${icon_dir_name}-${icon_number}`; 
+	const ICON_DIR = `${icon_dir_name}-${icon_number}`;
 	const ICON_EXT = 'png';
 	const POI_COLOR = '000000ff';
 
@@ -809,7 +774,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 			 * constructor for KML Style tags
 			 * @class
 			 */
-		const new_Style = (url, styles, style_type) => { 
+		const new_Style = (url, styles, style_type) => {
 			const reverse = (s) => s.split("").reverse().join("");
 			const basic_style = (style_type, default_stylings) => {
 				return (styles) => {
@@ -824,8 +789,9 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 					};
 				};
 			};
+
 			const style_types = {
-				LineStyle: basic_style('LineStyle', [ {width: LINE_WIDTH} ]),
+				LineStyle: basic_style('LineStyle', [{width: LINE_WIDTH}]),
 				PolyStyle: basic_style('PolyStyle', []),
 				IconStyle: basic_style('IconStyle', [])
 			};
@@ -900,15 +866,15 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		};
 
 		const flatten_styles = (styles) => {
-			let flat_styles = [];
+			const flat_styles = [];
 			Object.values(styles).forEach(s => {
-				if (s.Style) { 
+				if (s.Style) {
 					flat_styles.push(s);
 				} else if (Array.isArray(s)) {
 					s.forEach(x => flat_styles.push(x));
 				} else {
 					Object.values(s).forEach(x => flat_styles.push(x));
-				} 
+				}
 			});
 			return flat_styles;
 		};
@@ -929,6 +895,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 					break;
 				}
 			}
+
 			if (extended) {
 				placemark[extended].push(
 					{[extension]: data}
@@ -941,42 +908,49 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 				});
 			}
 		}
+
 		function describe(placemark, description) {
 			placemark.push({'description': description});
 		}
 
-		const table = row.table;
-		const geometry = row.geometry;
-		const name = row.name;
-		const comments = row.comments;
-		const class_code = row.class_code;
-		const type = row.type;
-		const description = row.description;
-		const warnings = row.warnings;
+		const {table} = row;
+		const {geometry} = row;
+		const {name} = row;
+		const {comments} = row;
+		const {class_code} = row;
+		const {type} = row;
+		const {description} = row;
+		const {warnings} = row;
 		let styleUrl;
 
-		let placemark = [];
+		const placemark = [];
 		placemark.push(geometry);
 		if (name) {
 			placemark.push({'name': name});
 		}
+
 		if (comments) {
 			describe(placemark, comments);
 		}
+
 		if (description) {
 			describe(placemark, description);
 		}
+
 		if (type) {
 			describe(placemark, type);
 			styleUrl = style_urls[table][type];
 		}
+
 		if (warnings) {
 			extend_data(placemark, 'warnings', warnings);
 		}
+
 		if (class_code) {
 			extend_data(placemark, 'class_code', class_code);
 			styleUrl = style_urls[table][class_code];
 		}
+
 		styleUrl = styleUrl || style_urls[table];
 		placemark.push({styleUrl: `#${styleUrl}`});
 		return placemark;
@@ -1043,7 +1017,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		)
 	];
 
-	return promise_KML(area_id, client, queries, newer_placemark, styles_for_header)
+	return promise_KML(area_id, client, queries, newer_placemark, styles_for_header);
 }
 
 	/**
@@ -1106,7 +1080,7 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 		get_KML(area_id, lang, client, icon_number, icon_dir)
 			.then(kml => {
 				client.end();
-				res.attachment(`${kml[0].kml[2].name}.kmz`)
+				res.attachment(`${kml[0].kml[2].name}.kmz`);
 				write_to_kmz(xml(kml), output_stream, icon_number, icon_dir);
 			});
 		resolve(output_stream);
@@ -1123,7 +1097,7 @@ app.get('/', (req, res) => {
 	make_KMZ_stream(area_id, 'fr', output, res)
 		.then(r => {
 			console.log(r);
-		}); 
+		});
 });
 
 app.listen(3000);
