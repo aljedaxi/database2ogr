@@ -161,7 +161,7 @@ function geojson_query_database(query_object, area_id, client, Feature) {
 		resolve(
 			client.query(query)
 				.then(res => {
-					if (!res) console.log(res);
+					if (!res) console.error(res);
 					return res.rows.map(row_to_feature);
 				})
 				.catch(e => {
@@ -407,6 +407,7 @@ function get_geojson(area_id) {
 	const client = new Client(); //from require('pg');
 	client.connect();
 
+	//{debug} is just a way for me to redirect the output to files
 	const debug = true; //TODO set false in production
 
 	promise_of_geojson(area_id, client, queries, Feature)
@@ -1092,17 +1093,22 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 	});
 }
 
+function KML_express_app_wrappy_thing(areaId, lang) {
+	lang = lang || 'en';
+	const express = require('express');
+	const app = express();
+
+	app.get('/', (req, res) => {
+		res.attachment(`${areaId}.kmz`);
+		const output = res;
+		make_KMZ_stream(areaId, lang, output, res)
+			.then(r => {
+				console.log(r);
+			});
+	});
+	app.listen(3000);
+}
+
 const areaId = 401;
-const express = require('express');
-const app = express();
 
-app.get('/', (req, res) => {
-	res.attachment(`${areaId}.kmz`);
-	const output = res;
-	make_KMZ_stream(areaId, 'fr', output, res)
-		.then(r => {
-			console.log(r);
-		});
-});
-
-app.listen(3000);
+get_geojson(areaId);
