@@ -24,7 +24,7 @@ function Recipe(layers) {
 	};
 }
 
-function Wrapper(recipe) {
+function Message(recipe) {
 	return {
 		recipe,
 		name: TILESET_NAME
@@ -45,7 +45,7 @@ const layers = objectify(SOURCE_IDS_IN);
 let output;
 
 if (WRAP_P) {
-	output = new Wrapper(new Recipe(layers));
+	output = new Message(new Recipe(layers));
 } else {
 	output = new Recipe(layers);
 }
