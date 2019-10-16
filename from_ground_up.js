@@ -20,26 +20,6 @@ const {Client} = require('pg');
 const archiver = require('archiver');
 // let geojsonhint = require('geojsonhint');
 
-	/** object mapping from languages to database tables to the names presented to the user */
-const names = {
-	en: {
-		areas_vw: 'Area',
-		points_of_interest: 'Points of interest',
-		access_roads: 'Access road',
-		avalanche_paths: 'Avalanche path',
-		decision_points: 'Decision point',
-		zones: 'Zone'
-	},
-	fr: {
-		areas_vw: 'Régions',
-		points_of_interest: "Points d'intérêt",
-		access_roads: "Routes d'accès",
-		avalanche_paths: 'Couloirs d’avalanche',
-		decision_points: 'point de décision',
-		zones: 'Zone'
-	}
-};
-
 	/**
 	 * @class
 	 * @param {string} table								- table to SELECT from
@@ -49,6 +29,27 @@ const names = {
 	 * @param {Query}	subquery						 - in practice, query to decision_point_warnings from inside decision_points
 	 */
 function Query(table, non_geometry_columns, where_clause, ogr_type, lang, bounding_box, subquery, geometry_column) {
+		/** object mapping from languages to database tables to the names presented to the user 
+		 */
+	const names = {
+		en: {
+			areas_vw: 'Area',
+			points_of_interest: 'Points of interest',
+			access_roads: 'Access road',
+			avalanche_paths: 'Avalanche path',
+			decision_points: 'Decision point',
+			zones: 'Zone'
+		},
+		fr: {
+			areas_vw: 'Régions',
+			points_of_interest: "Points d'intérêt",
+			access_roads: "Routes d'accès",
+			avalanche_paths: 'Couloirs d’avalanche',
+			decision_points: 'point de décision',
+			zones: 'Zone'
+		}
+	};
+
 	this.table = table;
 	this.non_geometry_columns = non_geometry_columns;
 	this.where_clause = where_clause;
