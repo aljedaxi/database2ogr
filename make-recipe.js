@@ -1,11 +1,11 @@
 'use strict';
 
-const {USERNAME} = process.env;
+const TILESET_NAME = process.argv[2] || 'test';
+const SOURCE_IDS_IN = process.argv[3].split(' ').filter(notBlankP);
 
 const notBlankP = s => s !== '';
 
-const TILESET_NAME = process.argv[2] || 'test';
-const SOURCE_IDS_IN = process.argv[3].split(' ').filter(notBlankP);
+const {USERNAME} = process.env;
 const WRAP_IN = process.env.WRAP || '0';
 const WRAP_P = parseInt(WRAP_IN, 10);
 
