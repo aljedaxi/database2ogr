@@ -23,27 +23,6 @@ const {Client} = require('pg');
 const archiver = require('archiver');
 // let geojsonhint = require('geojsonhint');
 
-	/** object mapping from languages to database tables to the names presented to the user 
-	 */
-const names = {
-	en: {
-		areas_vw: 'Area',
-		points_of_interest: 'Points of interest',
-		access_roads: 'Access road',
-		avalanche_paths: 'Avalanche path',
-		decision_points: 'Decision point',
-		zones: 'Zone'
-	},
-	fr: {
-		areas_vw: 'Régions',
-		points_of_interest: "Points d'intérêt",
-		access_roads: "Routes d'accès",
-		avalanche_paths: 'Couloirs d’avalanche',
-		decision_points: 'point de décision',
-		zones: 'Zone'
-	}
-};
-
 	/**
 	 * @class
 	 * @param {string} table								- table to SELECT from
@@ -53,6 +32,27 @@ const names = {
 	 * @param {Query}	subquery						 - in practice, query to decision_point_warnings from inside decision_points
 	 */
 function Query(table, non_geometry_columns, where_clause, ogr_type, lang, bounding_box, subquery, geometry_column) {
+		/** object mapping from languages to database tables to the names presented to the user 
+		 */
+	const names = {
+		en: {
+			areas_vw: 'Area',
+			points_of_interest: 'Points of interest',
+			access_roads: 'Access road',
+			avalanche_paths: 'Avalanche path',
+			decision_points: 'Decision point',
+			zones: 'Zone'
+		},
+		fr: {
+			areas_vw: 'Régions',
+			points_of_interest: "Points d'intérêt",
+			access_roads: "Routes d'accès",
+			avalanche_paths: 'Couloirs d’avalanche',
+			decision_points: 'point de décision',
+			zones: 'Zone'
+		}
+	};
+
 	this.table = table;
 	this.non_geometry_columns = non_geometry_columns;
 	this.where_clause = where_clause;
@@ -165,7 +165,7 @@ function geojson_query_database(query_object, area_id, client, Feature) {
 		resolve(
 			client.query(query)
 				.then(res => {
-					if (!res) console.log(res);
+					if (!res) console.error(res);
 					return res.rows.map(row_to_feature);
 				})
 				.catch(e => {
@@ -360,6 +360,7 @@ function get_geojson(area_id) {
 	const client = new Client(); //from require('pg');
 	client.connect();
 
+	//{debug} is just a way for me to redirect the output to files
 	const debug = true; //TODO set false in production
 
 	promise_of_geojson(area_id, client, queries, Feature)
@@ -1045,17 +1046,22 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 	});
 }
 
+function KML_express_app_wrappy_thing(areaId, lang) {
+	lang = lang || 'en';
+	const express = require('express');
+	const app = express();
+
+	app.get('/', (req, res) => {
+		res.attachment(`${areaId}.kmz`);
+		const output = res;
+		make_KMZ_stream(areaId, lang, output, res)
+			.then(r => {
+				console.log(r);
+			});
+	});
+	app.listen(3000);
+}
+
 const areaId = 401;
-const express = require('express');
-const app = express();
 
-app.get('/', (req, res) => {
-	res.attachment(`${areaId}.kmz`);
-	const output = res;
-	make_KMZ_stream(areaId, 'fr', output, res)
-		.then(r => {
-			console.log(r);
-		});
-});
-
-app.listen(3000);
+get_geojson(areaId);
