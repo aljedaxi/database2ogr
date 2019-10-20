@@ -693,10 +693,6 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 	 */
 function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 	lang = lang || 'en';
-	const LINE_WIDTH = 3; // For LineStyles, in pixels
-	const ICON_DIR = `${icon_dir_name}-${icon_number}`;
-	const ICON_EXT = 'png';
-	const POI_COLOR = '000000ff';
 
 	const style_urls = {
 		zones: [
@@ -726,10 +722,17 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		 * @returns {Array} returns an array of Style objects
 		 */
 	const deal_with_styling = () => {
+		const styly_stuff = {
+			LINE_WIDTH: 3, // For LineStyles, in pixels
+			ICON_DIR: `${icon_dir_name}-${icon_number}`,
+			ICON_EXT: 'png',
+			POI_COLOR: '000000ff',
+		};
+
 		const new_Icon = (icon, color) => {
 			return {
 				Icon: [
-					{href: `${ICON_DIR}/new-${icon}-${icon_number}.${ICON_EXT}`},
+					{href: `${styly_stuff.ICON_DIR}/new-${icon}-${icon_number}.${styly_stuff.ICON_EXT}`},
 					{color}
 				]
 			};
@@ -756,7 +759,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 			};
 
 			const style_types = {
-				LineStyle: basic_style('LineStyle', [{width: LINE_WIDTH}]),
+				LineStyle: basic_style('LineStyle', [{width: styly_stuff.LINE_WIDTH}]),
 				PolyStyle: basic_style('PolyStyle', []),
 				IconStyle: basic_style('IconStyle', [])
 			};
@@ -789,7 +792,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 			access_roads: new_Style(style_urls.access_roads, [
 				{color: 'ffff00ff'}, // Yellow
 				{'gx:outerColor': 'ff00ff00'}, // Green
-				{'gx:outerWidth': LINE_WIDTH + 5} // TODO isn't working but isn't important
+				{'gx:outerWidth': styly_stuff.LINE_WIDTH + 5} // TODO isn't working but isn't important
 			], 'LineStyle'),
 			avalanche_paths: new_Style(style_urls.avalanche_paths, [
 				{color: 'ff0000ff'}
@@ -800,32 +803,32 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 			], 'IconStyle'),
 			points_of_interest: {
 				Other: new_Style(style_urls.points_of_interest.Other, [
-					{color: POI_COLOR},
-					new_Icon('marker', POI_COLOR)
+					{color: styly_stuff.POI_COLOR},
+					new_Icon('marker', styly_stuff.POI_COLOR)
 				], 'IconStyle'),
 				Parking: new_Style(style_urls.points_of_interest.Parking, [
-					{color: POI_COLOR},
-					new_Icon('parking', POI_COLOR)
+					{color: styly_stuff.POI_COLOR},
+					new_Icon('parking', styly_stuff.POI_COLOR)
 				], 'IconStyle'),
 				'Rescue Cache': new_Style(style_urls.points_of_interest['Rescue Cache'], [
-					{color: POI_COLOR},
-					new_Icon('blood-bank', POI_COLOR)
+					{color: styly_stuff.POI_COLOR},
+					new_Icon('blood-bank', styly_stuff.POI_COLOR)
 				], 'IconStyle'),
 				Cabin: new_Style(style_urls.points_of_interest.Cabin, [
-					{color: POI_COLOR},
-					new_Icon('shelter', POI_COLOR)
+					{color: styly_stuff.POI_COLOR},
+					new_Icon('shelter', styly_stuff.POI_COLOR)
 				], 'IconStyle'),
 				Destination: new_Style(style_urls.points_of_interest.Destination, [
-					{color: POI_COLOR},
-					new_Icon('attraction', POI_COLOR)
+					{color: styly_stuff.POI_COLOR},
+					new_Icon('attraction', styly_stuff.POI_COLOR)
 				], 'IconStyle'),
 				Lake: new_Style(style_urls.points_of_interest.Lake, [
-					{color: POI_COLOR},
-					new_Icon('water', POI_COLOR)
+					{color: styly_stuff.POI_COLOR},
+					new_Icon('water', styly_stuff.POI_COLOR)
 				], 'IconStyle'),
 				Mountain: new_Style(style_urls.points_of_interest.Mountain, [
-					{color: POI_COLOR},
-					new_Icon('mountain', POI_COLOR)
+					{color: styly_stuff.POI_COLOR},
+					new_Icon('mountain', styly_stuff.POI_COLOR)
 				], 'IconStyle')
 			}
 		};
