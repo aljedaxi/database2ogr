@@ -7,7 +7,6 @@ runMapboxing() {
 	PGPASSWORD=$PGPASSWORD \
 	PGDATABASE=$PGDATABASE \
 	node $1 $2
-	echo meme
 }
 
 uploadSource() {

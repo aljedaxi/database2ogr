@@ -154,21 +154,14 @@ function queryDatabase(queryObject, client, Feature) {
 	};
 
 	return new Promise((resolve, reject) => {
-		resolve(
-			client.query(query)
-				.then(res => {
-					if (!res) {
-						console.error(res);
-					}
-
-					return res.rows.map(row_to_feature);
-				})
-				.catch(error => {
-					console.log(query);
-					console.error(error.stack);
-					reject(error); // TODO is this a good pattern
-				})
-		);
+		client.query(query)
+			.then(res => resolve(res.rows.map(row_to_feature)))
+			.catch(error => {
+				console.error('something went wrong when querying the database');
+				console.error(query);
+				console.error(error.stack);
+				reject(error); // TODO is this a good pattern
+			});
 	});
 }
 
@@ -316,10 +309,7 @@ function getGeoJSONLD(outFolder) {
 		return rows_out;
 	}
 
-	const client = new Client(); // From require('pg');
-	client.connect();
-
-	new Promise((resolve, reject) => {
+	return new Promise((resolve, reject) => {
 		const query_promises = queries.map(query => queryDatabase(query, client, Feature));
 		Promise.all(query_promises).then(values => {
 			values.forEach(querys_features => {
@@ -337,15 +327,22 @@ function getGeoJSONLD(outFolder) {
 				);
 
 				querys_features.forEach(writeToOutput);
+				resolve(true);
 			});
 		});
-		resolve(true);
-	}).then(client.close);
+	});
 }
 
 
 const outFolder = process.argv.pop() || 'geojson-ld';
-getGeoJSONLD(outFolder);
+
+const client = new Client(); // From require('pg');
+client.connect();
+
+getGeoJSONLD(outFolder)
+	.then(r => {
+		client.end();
+	});
 
 /*
 	UploadsClient.listUploads()
