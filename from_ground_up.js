@@ -1048,8 +1048,7 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 
 function KML_express_app_wrappy_thing(areaId, lang) {
 	lang = lang || 'en';
-	const express = require('express');
-	const app = express();
+	const app = require('express')();
 
 	app.get('/', (req, res) => {
 		res.attachment(`${areaId}.kmz`);

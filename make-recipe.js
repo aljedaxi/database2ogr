@@ -12,8 +12,8 @@ const WRAP_P = parseInt(WRAP_IN, 10);
 function BasicSource(sourceName) {
 	return {
 		source: `mapbox://tileset-source/${USERNAME}/${sourceName}`,
-		minzoom: 4,
-		maxzoom: 8
+		minzoom: 0,
+		maxzoom: 22
 	};
 }
 

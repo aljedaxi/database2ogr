@@ -2,17 +2,18 @@
 
 const fs = require('fs');
 /*
-const mbxUploads = require('@mapbox/mapbox-sdk/services/uploads');
+Const mbxUploads = require('@mapbox/mapbox-sdk/services/uploads');
 const uploadsClient = mbxUploads({accessToken: process.env.TOKEN});
 const AWS = require('aws-sdk');
 */
 const {Client} = require('pg');
+const _ = require('ramda');
 
 const ownerId = process.env.USERNAME;
 const TEST_DATA_PATH = 'populated_places.geojson.ld';
 
 function Query(table, non_geometry_columns, where_clause, ogr_type, lang, bounding_box, subquery, geometry_column) {
-		/** object mapping from languages to database tables to the names presented to the user 
+	/** Object mapping from languages to database tables to the names presented to the user
 		 */
 	const names = {
 		en: {
@@ -25,8 +26,8 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
 		},
 		fr: {
 			areas_vw: 'Régions',
-			points_of_interest: "Points d'intérêt",
-			access_roads: "Routes d'accès",
+			points_of_interest: 'Points d\'intérêt',
+			access_roads: 'Routes d\'accès',
 			avalanche_paths: 'Couloirs d’avalanche',
 			decision_points: 'point de décision',
 			zones: 'Zone'
@@ -43,11 +44,11 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
 	this.lang = lang || 'en';
 	this.name = names[this.lang][table];
 	/*
-	this.geometry_transformation;
+	This.geometry_transformation;
 	this.to_query;
 	*/
 
-	switch(ogr_type) {
+	switch (ogr_type) {
 		case 'KML':
 			this.geometry_transformation = 'ST_AsKML';
 			break;
@@ -61,20 +62,20 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
 	if (typeof this.geometry_column === 'null') {
 		this.to_query = `SELECT ${this.non_geometry_columns.join(', ')} FROM ${this.table}`;
 	} else if (bounding_box) {
-			this.to_query = `SELECT ${this.geometry_transformation}(${this.geometry_column}) AS geometry, ${this.geometry_transformation}(ST_Envelope(${this.geometry_column})) AS bounding_box, ${this.non_geometry_columns.join(', ')} FROM ${this.table}`;
+		this.to_query = `SELECT ${this.geometry_transformation}(${this.geometry_column}) AS geometry, ${this.geometry_transformation}(ST_Envelope(${this.geometry_column})) AS bounding_box, ${this.non_geometry_columns.join(', ')} FROM ${this.table}`;
 	} else {
 		this.to_query = `SELECT ${this.geometry_transformation}(${this.geometry_column}) AS geometry, ${this.non_geometry_columns.join(', ')} FROM ${this.table}`;
 	}
 
 	if (this.where_clause) {
-		this.to_query += `WHERE ${this.where_clause};`;
+		this.to_query += ` WHERE ${this.where_clause};`;
 	} else {
 		this.to_query += ';';
 	}
 }
 
-	/**
-	 * constructor for a query that involves two tables.
+/**
+	 * Constructor for a query that involves two tables.
 	 * @class
 	 * @param {Query}	query1			 -- the table to the joined from
 	 * @param {Query}	query2			 -- the table to the joined to	??? just read this.to_query it'll make sense
@@ -83,8 +84,8 @@ function Query(table, non_geometry_columns, where_clause, ogr_type, lang, boundi
 	 * this will probably only work for our specific use case, but i don't think it's worth it to write expansive code here
 	 */
 function JoinQuery(query1, query2, join_on, where_clause) {
-		/**
-		 * join non-geometry columns
+	/**
+		 * Join non-geometry columns
 		 */
 	function join_non_geoms(query) {
 		const joined_columns_proto = query.non_geometry_columns.join(`, ${query.table}.`);
@@ -99,12 +100,12 @@ function JoinQuery(query1, query2, join_on, where_clause) {
 				FROM ${query1.table} JOIN ${query2.table} 
 					ON ${join_on}
 				WHERE ${where_clause};`;
-		} else {
-			return `SELECT ${geometry_transformation}(${geometry_column}) AS geometry,
+		}
+
+		return `SELECT ${geometry_transformation}(${geometry_column}) AS geometry,
 				${join_non_geoms(query1)}, ${join_non_geoms(query2)}
 				FROM ${query1.table} JOIN ${query2.table} 
 					ON ${join_on};`;
-		}
 	}
 
 	const geometry_column = query1.geometry_column || query2.geometry_column;
@@ -120,7 +121,7 @@ function JoinQuery(query1, query2, join_on, where_clause) {
 }
 
 function queryDatabase(queryObject, client, Feature) {
-		/**
+	/**
 		 * @function row_to_feature
 		 * @description transform a row into a javascript object into a geojson feature
 		 * @return {Feature}
@@ -134,9 +135,9 @@ function queryDatabase(queryObject, client, Feature) {
 		function object_to_feature(row, geometry_column) {
 			geometry_column = geometry_column || 'geometry';
 			const geometry = row[geometry_column];
-			const feature_type = row['table'];
+			const feature_type = row.table;
 			delete row[geometry_column];
-			delete row['table'];
+			delete row.table;
 			return new Feature(
 				geometry,
 				feature_type,
@@ -149,25 +150,32 @@ function queryDatabase(queryObject, client, Feature) {
 
 	const query = {
 		name: `get rows from ${queryObject.table}`,
-		text: queryObject.to_query,
+		text: queryObject.to_query
 	};
 
 	return new Promise((resolve, reject) => {
 		resolve(
 			client.query(query)
 				.then(res => {
-					if (!res) console.error(res);
+					if (!res) {
+						console.error(res);
+					}
+
 					return res.rows.map(row_to_feature);
 				})
-				.catch(e => {
-					console.error(e.stack);
-					reject(e); //TODO is this a good pattern
+				.catch(error => {
+					console.log(query);
+					console.error(error.stack);
+					reject(error); // TODO is this a good pattern
 				})
 		);
 	});
 }
 
-function getGeoJSONLD() {
+/**
+	* @param {string} outFolder - folder for geoJSON 
+	*/
+function getGeoJSONLD(outFolder) {
 	const queries = [
 		new Query(
 			'areas_vw',
@@ -211,13 +219,13 @@ function getGeoJSONLD() {
 				'en',
 				false
 			),
-			'decision_point_id=decision_points.id',
-			null,
+			'decision_points_warnings.decision_point_id=decision_points.id',
+			null
 		),
 		new Query(
 			'zones',
 			['id', 'area_id', 'class_code', 'comments'],
-			'area_id=$1',
+			null,
 			'GeoJSON',
 			'en',
 			true
@@ -225,23 +233,23 @@ function getGeoJSONLD() {
 	];
 
 	function Feature(geometry, feature_type, properties) {
-		this.type = "Feature";
+		this.type = 'Feature';
 		try {
 			this.geometry = JSON.parse(geometry);
-		} catch (e) {
+		} catch (error) {
 			console.error('is one of your queries returning KML?');
 			console.error(this.geometry);
-			console.error(e.stack);
-			throw new TypeError("geometry isn't geojson");
+			console.error(error.stack);
+			throw new TypeError('geometry isn\'t geojson');
 		}
 
-		if('bounding_box' in properties) {
+		if ('bounding_box' in properties) {
 			this.bounding_box = properties.bounding_box;
 			delete properties.bounding_box;
 		}
 
 		if ('type' in properties) {
-			properties.type = properties.type.toLowerCase().replace(" ", "-");
+			properties.type = properties.type.toLowerCase().replace(' ', '-');
 		}
 
 		this.properties = properties;
@@ -249,7 +257,7 @@ function getGeoJSONLD() {
 	}
 
 	function FeatureCollection(features)	{
-		this.type = "FeatureCollection";
+		this.type = 'FeatureCollection';
 		this.features = features;
 	}
 
@@ -258,14 +266,12 @@ function getGeoJSONLD() {
 	}
 
 		/**
-		 * decomposes the garbage the database outputs into digestible warnings
+		 * Decomposes the garbage the database outputs into digestible warnings
 		 * @returns pg rows
 		 */
 	function warnify(features) {
-		//decompose the rows into their geometries and collect the unique ones
-		let geometries = Array.from(
-			new Set(features.map(f => f.geometry.coordinates.join(', ')))
-		);
+		// Decompose the rows into their geometries and collect the unique ones
+		let geometries = [...new Set(features.map(f => f.geometry.coordinates.join(', ')))];
 		geometries = geometries.map(g => g.split(', '));
 
 		const properties = {};
@@ -273,13 +279,13 @@ function getGeoJSONLD() {
 			properties[g] = {};
 			properties[g].warnings = {
 				'managing-risk': [],
-				'concern': []
+				concern: []
 			};
 		});
 
 		features.forEach(r => {
 			try {
-				properties[r.geometry.coordinates]['warnings'][r.properties.type].push(r.properties.warning);
+				properties[r.geometry.coordinates].warnings[r.properties.type].push(r.properties.warning);
 				delete r.properties.warning;
 				delete r.properties.type;
 				for (const key in r.properties) {
@@ -287,8 +293,8 @@ function getGeoJSONLD() {
 						properties[r.geometry.coordinates][key] = r.properties[key];
 					}
 				}
-			} catch (e) {
-				console.error(e.stack);
+			} catch (error) {
+				console.error(error.stack);
 			}
 		});
 
@@ -310,14 +316,10 @@ function getGeoJSONLD() {
 		return rows_out;
 	}
 
-	const client = new Client(); //from require('pg');
+	const client = new Client(); // From require('pg');
 	client.connect();
 
-	const outFolder = 'new_sources';
-
 	new Promise((resolve, reject) => {
-		const features = [];
-
 		const query_promises = queries.map(query => queryDatabase(query, client, Feature));
 		Promise.all(query_promises).then(values => {
 			values.forEach(querys_features => {
@@ -329,88 +331,34 @@ function getGeoJSONLD() {
 					`${outFolder}/${querys_features[0].properties.table}`
 				);
 
-				querys_features.forEach(
-					feature => {
-						output.write(JSON.stringify(feature)) //features.push(feature)
-					}
+				const writeToOutput = _.compose(
+					output.write.bind(output),
+					JSON.stringify
 				);
+
+				querys_features.forEach(writeToOutput);
 			});
-			const collected_features = new FeatureCollection(features);
-			resolve(collected_features);
 		});
+		resolve(true);
 	}).then(client.close);
 }
 
-getGeoJSONLD();
+
+const outFolder = process.argv.pop() || 'geojson-ld';
+getGeoJSONLD(outFolder);
 
 /*
-uploadsClient.listUploads()
-	.send()
-	.then(r => console.log(r.body));
-//* /
-/*
-
-//You'll be doing tilesets.forEach(tileset => the_below)
-const tileset = {
-	name: 'test',
-	path: TEST_DATA_PATH
-};
-
-const getCredentials = () => {
-  return uploadsClient
-    .createUploadCredentials()
-    .send()
-    .then(response => response.body);
-};
-
-const putFileOnS3 = (credentials) => {
-  const s3 = new AWS.S3({
-    accessKeyId: credentials.accessKeyId,
-    secretAccessKey: credentials.secretAccessKey,
-    sessionToken: credentials.sessionToken,
-    region: 'us-east-1'
-  });
-  return s3.putObject({
-    Bucket: credentials.bucket,
-    Key: credentials.key,
-    Body: fs.createReadStream(tileset.path)
-  }).promise();
-};
-
-const putFileOnMapbox = (credentials) => {
-	return uploadsClient.createUpload({
-		mapId: `${ownerId}.${tileset.name}`,
-		url: credentials.url
-	})
+	UploadsClient.listUploads()
 		.send()
-		.then(console.log)
-		.catch(console.error);
-}
+		.then(r => console.log(r.body));
+	//* /
+	/*
 
-getCredentials()
-	.then(creds => {
-		putFileOnS3(creds)
-			.then(dunno => {
-				putFileOnMapbox(creds)
-			})
-			.catch(console.error);
-	})
-	.catch(console.error);
-
-/*
-			.then(dunno => {
-
-/*
-Function upload_to_mapbox(geojson_doc, area_id) {
-	const MY_ACCESS_TOKEN = 'testest'; //TODO
-	const USERNAME = 'testest'; //TODO
-	const AWS = require('aws-sdk'); //TODO move to top
-	const mbxUploads = require('@mapbox/mapbox-sdk/services/uploads');
-	const uploadsClient = mbxClient({accessToken: MY_ACCESS_TOKEN});
-	const region = 'us-east-1';
-	const geojson_stream = new Readable();
-	geojson_stream.push(geojson_doc);
-	geojson_stream.push(null);
+	//You'll be doing tilesets.forEach(tileset => the_below)
+	const tileset = {
+		name: 'test',
+		path: TEST_DATA_PATH
+	};
 
 	const getCredentials = () => {
 		return uploadsClient
@@ -421,33 +369,84 @@ Function upload_to_mapbox(geojson_doc, area_id) {
 
 	const putFileOnS3 = (credentials) => {
 		const s3 = new AWS.S3({
-			accessKeyId = credentials.accessKeyId,
-			secretAccessKey = credentials.secretAccessKey,
-			sessionToken = credentials.sessionToken,
-			region: REGION
+			accessKeyId: credentials.accessKeyId,
+			secretAccessKey: credentials.secretAccessKey,
+			sessionToken: credentials.sessionToken,
+			region: 'us-east-1'
 		});
 		return s3.putObject({
 			Bucket: credentials.bucket,
 			Key: credentials.key,
-			//Body: fs.createReadStream(GEOJSON_FILE_PATH)
-			Body: geojson_stream
+			Body: fs.createReadStream(tileset.path)
 		}).promise();
 	};
+
+	const putFileOnMapbox = (credentials) => {
+		return uploadsClient.createUpload({
+			mapId: `${ownerId}.${tileset.name}`,
+			url: credentials.url
+		})
+			.send()
+			.then(console.log)
+			.catch(console.error);
+	}
 
 	getCredentials()
 		.then(creds => {
 			putFileOnS3(creds)
 				.then(dunno => {
-					uploadsClient.createUpload({
-						mapId: `${USERNAME}.${area_id}`, //TODO
-						url: creds.url
-					})
-						.send()
-						.then(response => {
-							const upload = response.body;
-						});
-				});
-		}); //test for failure
-}
-*/
+					putFileOnMapbox(creds)
+				})
+				.catch(console.error);
+		})
+		.catch(console.error);
 
+	Function upload_to_mapbox(geojson_doc, area_id) {
+		const MY_ACCESS_TOKEN = 'testest'; //TODO
+		const USERNAME = 'testest'; //TODO
+		const AWS = require('aws-sdk'); //TODO move to top
+		const mbxUploads = require('@mapbox/mapbox-sdk/services/uploads');
+		const uploadsClient = mbxClient({accessToken: MY_ACCESS_TOKEN});
+		const region = 'us-east-1';
+		const geojson_stream = new Readable();
+		geojson_stream.push(geojson_doc);
+		geojson_stream.push(null);
+
+		const getCredentials = () => {
+			return uploadsClient
+				.createUploadCredentials()
+				.send()
+				.then(response => response.body);
+		};
+
+		const putFileOnS3 = (credentials) => {
+			const s3 = new AWS.S3({
+				accessKeyId = credentials.accessKeyId,
+				secretAccessKey = credentials.secretAccessKey,
+				sessionToken = credentials.sessionToken,
+				region: REGION
+			});
+			return s3.putObject({
+				Bucket: credentials.bucket,
+				Key: credentials.key,
+				//Body: fs.createReadStream(GEOJSON_FILE_PATH)
+				Body: geojson_stream
+			}).promise();
+		};
+
+		getCredentials()
+			.then(creds => {
+				putFileOnS3(creds)
+					.then(dunno => {
+						uploadsClient.createUpload({
+							mapId: `${USERNAME}.${area_id}`, //TODO
+							url: creds.url
+						})
+							.send()
+							.then(response => {
+								const upload = response.body;
+							});
+					});
+			}); //test for failure
+	}
+*/
