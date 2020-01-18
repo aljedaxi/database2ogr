@@ -21,7 +21,12 @@ const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
 const Client = require('pg').Client;
 const archiver = require('archiver');
+const _ = require('ramda');
 // let geojsonhint = require('geojsonhint');
+const trace = s => {
+	console.log(s);
+	return s;
+};
 
 	/**
 	 * @class
@@ -368,7 +373,7 @@ function get_geojson(area_id) {
 			client.end();
 			//TODO upload to mapbox
 			if (debug) {
-				console.log(JSON.stringify(geoJsonDoc));
+				console.error(JSON.stringify(geoJsonDoc));
 			}
 		});
 }
@@ -722,14 +727,12 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		 * @returns {Array} returns an array of Style objects
 		 */
 	const deal_with_styling = () => {
-		const new_Icon = (icon, color) => {
-			return {
-				Icon: [
-					{href: `${ICON_DIR}/new-${icon}-${icon_number}.${ICON_EXT}`},
-					{color}
-				]
-			};
-		};
+		const new_Icon = (icon, color) => ({
+			Icon: [
+				{href: `${ICON_DIR}/new-${icon}-${icon_number}.${ICON_EXT}`},
+				{color}
+			]
+		});
 
 			/**
 			 * constructor for KML Style tags
@@ -825,13 +828,13 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 
 		const flatten_styles = styles => {
 			const flat_styles = [];
-			Object.values(styles).forEach(s => {
+			_.values(styles).forEach(s => {
 				if (s.Style) {
 					flat_styles.push(s);
 				} else if (Array.isArray(s)) {
 					s.forEach(x => flat_styles.push(x));
 				} else {
-					Object.values(s).forEach(x => flat_styles.push(x));
+					_.values(s).forEach(x => flat_styles.push(x));
 				}
 			});
 			return flat_styles;
@@ -842,7 +845,8 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 
 	const styles_for_header = deal_with_styling();
 
-	const new_placemark = (row, style_urls) => {
+
+	const new_placemark = style_urls => row => {
 		function extend_data(placemark, extension, data) {
 			let extended = 0;
 			let i = 0;
@@ -914,7 +918,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		return placemark;
 	};
 
-	const newer_placemark = row => new_placemark(row, style_urls);
+	const newer_placemark = new_placemark(style_urls);
 
 	const queries = [
 		new Query(
@@ -1001,7 +1005,7 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 			}
 		});
 		archive.on('error', err => {
-			console.log(err);
+			console.error(err);
 			throw err;
 		});
 		archive.pipe(output);
@@ -1032,9 +1036,11 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 	//	}
 	//});
 
+	console.log('promising');
 	return new Promise((resolve, reject) => {
 		get_KML(area_id, lang, client, icon_number, icon_dir)
 			.then(kml => {
+				console.log('kmled');
 				client.end();
 				res.attachment(`${kml[0].kml[2].name}.kmz`);
 				write_to_kmz(xml(kml), output_stream, icon_number, icon_dir);
@@ -1043,11 +1049,13 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 	});
 }
 
-function KML_express_app_wrappy_thing(areaId, lang) {
-	lang = lang || 'en';
+function KML_express_app_wrappy_thing() {
 	const app = require('express')();
 
-	app.get('/', (req, res) => {
+	app.get('/:lang/:areaId.kmz', (req, res) => {
+		const areaId = req.params.areaId;
+		const lang = req.params.lang;
+		trace(areaId, lang);
 		res.attachment(`${areaId}.kmz`);
 		const output = res;
 		make_KMZ_stream(areaId, lang, output, res)
@@ -1055,9 +1063,11 @@ function KML_express_app_wrappy_thing(areaId, lang) {
 				console.log(r);
 			});
 	});
+	trace('dab')
 	app.listen(3000);
 }
 
 const areaId = 401;
 
-get_geojson(areaId);
+// get_geojson(areaId);
+KML_express_app_wrappy_thing();
