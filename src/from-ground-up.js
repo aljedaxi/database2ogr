@@ -386,21 +386,17 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 		 * for the pickler
 		 */
 	function Geometry(decomposed_geometry) {
-		function new_point(point) {
-			return {
-				Point: [
-					{coordinates: point.coordinates}
-				]
-			};
-		}
+		const new_point = point => ({
+			Point: [
+				{coordinates: point.coordinates}
+			]
+		});
 
-		function new_linestring(line_string) {
-			return {
-				LineString: [
-					{coordinates: line_string.coordinates}
-				]
-			};
-		}
+		const new_linestring = line_string => ({
+			LineString: [
+				{coordinates: line_string.coordinates}
+			]
+		});
 
 		function new_polygon(polygon) {
 			const general_polygon = {
@@ -416,13 +412,11 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 			if(polygon.innerBoundaryIs) {
 				let inner_boundaries;
 				try {
-					inner_boundaries = polygon.innerBoundaryIs.map(linear_ring => {
-						return {
-							LinearRing: [
-								{coordinates: linear_ring.LinearRing.coordinates}
-							]
-						};
-					});
+					inner_boundaries = polygon.innerBoundaryIs.map(linear_ring => ({
+						LinearRing: [
+							{coordinates: linear_ring.LinearRing.coordinates}
+						]
+					}));
 				} catch (err) { //TODO can this err be removed?
 					inner_boundaries = [
 						{LinearRing: [
@@ -438,16 +432,10 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 			}
 		}
 
-		if ('Point' in decomposed_geometry) {
-			return new_point(decomposed_geometry.Point);
-		} else if ('LineString' in decomposed_geometry) {
-			return new_linestring(decomposed_geometry.LineString);
-		} else if ('Polygon' in decomposed_geometry) {
-			return new_polygon(decomposed_geometry.Polygon);
-		} else {
-			//TODO handle multigeometry
-			console.error(decomposed_geometry);
-		}
+		return ('Point' in decomposed_geometry) ? new_point(decomposed_geometry.Point)
+		: ('LineString' in decomposed_geometry) ? new_linestring(decomposed_geometry.LineString)
+		: ('Polygon'    in decomposed_geometry) ? new_polygon(decomposed_geometry.Polygon) 
+		  /*           else                  */ : console.error(decomposed_geometry);
 	}
 
 	const rowToObject = _.mergeDeepRight({table: query_object.table});
