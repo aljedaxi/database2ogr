@@ -623,11 +623,11 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 	}
 
 	function new_document(name, folders, styles) {
-		const doc = folders.map(f => { 
-			return {Folder: f}; 
-		});
-		styles.forEach(s => doc.push(s));
-		doc.push({name});
+		const doc = [].concat(
+			folders.map(Folder => ({Folder})),
+			styles,
+			[{name}]
+		);
 		return [{
 			kml: [
 				{_attr: {
@@ -640,13 +640,10 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 		}];
 	}
 
-	function new_folder(name, features) {
-		const folder = features.map(f => {
-			return {Placemark: f};
-		});
-		folder.push({name});
-		return folder;
-	}
+	const new_folder = (name, features) => [].concat(
+		features.map(Placemark => ({Placemark})),
+		[{name}]
+	);
 
 	return new Promise((resolve, reject) => {
 		const folders = [];
@@ -669,7 +666,10 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			});
 			const KML_doc = new_document(doc_name, folders, styles);
 			resolve(KML_doc);
-		}).catch(e => console.error(e.stack));
+		}).catch(e => {
+			console.error(e.stack);
+			reject(e);
+		});
 	});
 }
 
@@ -1059,9 +1059,9 @@ function KML_express_app_wrappy_thing() {
 const client = new Client();
 client.connect();
 const traceKml = _.compose(
-	_.map(
+	_.map(_.map(_.map(
 		trace
-	)
+	)))
 );
 
 get_KML(401, 'en', client)
