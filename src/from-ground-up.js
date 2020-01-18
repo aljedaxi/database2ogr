@@ -501,12 +501,14 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			 */
 		function htmlify(warnings) {
 			function tablify(warnings) {
-				const concerns = warnings.Concern.map(c => {
-					return `<tr> <td><span class="red-x">&#x2717;</span> ${c} </td> </tr>`;
-				}).join("\n				");
-				const risks = warnings['Managing risk'].map(r => {
-					return `<tr> <td><span class="green-check">&#x2717;</span> ${r} </td> </tr> `;
-				}).join("\n				");
+				const toChecklist = bullet => _.compose(
+					_.join("\n				"),
+					_.map(c => `<tr> <td><span class="${bullet}">&#x2717;</span> ${c} </td> </tr>`)
+				);
+
+				const concerns = toChecklist('red-x')(warnings.Concern);
+				const risks = toChecklist('green-check')(warnings['Managing risk']);
+
 				return `
 					<table class="orange-table">
 						<tbody>
@@ -576,12 +578,19 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			return html;
 		}
 
+		const getGeometries = _.compose(
+			_.uniq,
+			_.map(_.compose(
+				_.prop('coordinates'),
+				_.head,
+				_.prop('Point'),
+				_.prop('geometry')
+			))
+		);
+
 		const rows = wrapped_rows.rows;
 
-		//finds which warnings have unique coords
-		const geometries = Array.from(
-			new Set(rows.map(r => r.geometry.Point[0].coordinates))
-		);
+		const geometries = getGeometries(rows);
 
 		const warnings = {};
 		geometries.forEach(g => {
@@ -592,25 +601,24 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 		});
 		rows.forEach(r => {
 			try {
-				warnings[r.geometry.Point[0].coordinates][r.type].push(r.warning);
+				const coordinates = r.geometry.Point[0].coordinates;
+				warnings[coordinates][r.type].push(r.warning);
 			} catch (e) {
 				console.error(e.stack);
 			}
 		});
 		//decompose the rows into their geometries and collect the unique ones
-		const rows_out = geometries.map(geom => {
-			return {
-				geometry: {
-					Point: [
-						{coordinates: geom}
-					]
-				},
-				name: 'Decision Point',
-				//TODO comments:
-				description: htmlify(warnings[geom]),
-				table: 'decision_points'
-			};
-		});
+		const rows_out = geometries.map(geom => ({
+			geometry: {
+				Point: [
+					{coordinates: geom}
+				]
+			},
+			name: 'Decision Point',
+			//TODO comments:
+			description: htmlify(warnings[geom]),
+			table: 'decision_points'
+		}));
 		return rows_out;
 	}
 
