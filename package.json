@@ -1,0 +1,46 @@
+{
+  "name": "av-can_database_to_ogr",
+  "version": "1.0.0",
+  "description": "queries the avalanche canada database and returns KML or GeoJSON",
+  "main": "from_ground_up.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "archiver": "^3.1.1",
+    "aws-sdk": "^2.549.0",
+    "code-prettify": "^0.1.0",
+    "eslint": "^6.4.0",
+    "express": "^4.17.1",
+    "fast-xml-parser": "^3.12.20",
+    "geojson": "^0.5.0",
+    "geojsonhint": "^2.0.0",
+    "maki": "^2.1.0",
+    "mapbox-gl": "^1.4.1",
+    "pg": "^7.12.1",
+    "ramda": "^0.26.1",
+    "tape": "^4.11.0",
+    "tokml": "^0.4.0",
+    "uglify-js": "^3.6.0",
+    "xml-beautify": "^1.0.1",
+    "xml": "^1.0.1",
+    "xml-js": "^1.6.11",
+    "xml2js": "^0.4.22",
+    "xo": "^0.25.3",
+    "zip-stream": "^2.1.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "tap test/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aljedaxi/database2ogr.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/aljedaxi/database2ogr/issues"
+  },
+  "homepage": "https://github.com/aljedaxi/database2ogr#readme"
+}

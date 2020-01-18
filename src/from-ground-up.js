@@ -16,10 +16,10 @@
 	 * is Query, because i didn't care enough to fully port it.
 	 */
 
-const {Readable} = require('stream');
+const Readable = require('stream').Readable;
 const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
-const {Client} = require('pg');
+const Client = require('pg').Client;
 const archiver = require('archiver');
 // let geojsonhint = require('geojsonhint');
 
@@ -590,7 +590,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			return html;
 		}
 
-		const {rows} = wrapped_rows;
+		const rows = wrapped_rows.rows;
 
 		//finds which warnings have unique coords
 		const geometries = Array.from(
@@ -743,10 +743,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 					//which uses rrggbbaa. red green blue alpha/transparency
 					const re_colored_styles = styles.map(s => ('color' in s) ? {color: reverse(s.color)} : s);
 					return {
-						[style_type]: [
-							...default_stylings,
-							...re_colored_styles
-						]
+						[style_type]: default_stylings.concat(re_colored_styles)
 					};
 				};
 			};
@@ -874,14 +871,14 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 			placemark.push({description});
 		}
 
-		const {table} = row;
-		const {geometry} = row;
-		const {name} = row;
-		const {comments} = row;
-		const {class_code} = row;
-		const {type} = row;
-		const {description} = row;
-		const {warnings} = row;
+		const table = row.table;
+		const geometry = row.geometry;
+		const name = row.name;
+		const comments = row.comments;
+		const class_code = row.class_code;
+		const type = row.type;
+		const description = row.description;
+		const warnings = row.warnings;
 		let styleUrl;
 
 		const placemark = [];
