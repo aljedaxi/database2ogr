@@ -132,37 +132,25 @@ function JoinQuery(query1, query2, join_on, where_clause) {
 	 * @param	{Client}			client - pg {Client} object used to query the database
 	 * @return {Promise}							a {Feature} object for each row
 	 */
-function geojson_query_database(query_object, area_id, client, Feature) {
-		/**
-		 * @function row_to_feature
-		 * @description transform a row into a javascript object into a geojson feature
-		 * @return {Feature}
-		 */
-	function row_to_feature(row) {
-		function row_to_object(row) {
-			row.table = query_object.table;
-			return row;
-		}
+function geojson_query_database(queryObject, area_id, client, Feature) {
+	const row_to_object = _.mergeDeepRight({table: queryObject.table});
 
-		function object_to_feature(row, geometry_column) {
-			geometry_column = geometry_column || 'geometry';
-			const geometry = row[geometry_column];
-			const feature_type = row['table'];
-			delete row[geometry_column];
-			delete row['table'];
-			return new Feature(
-				geometry,
-				feature_type,
-				row
-			);
-		}
+	const object_to_feature = geometry_column => row => (
+		new Feature(
+			row[geometry_column],
+			row.table,
+			row
+		)
+	);
 
-		return object_to_feature(row_to_object(row));
-	}
+	const rowToFeature = _.compose(
+		object_to_feature('geometry'),
+		row_to_object
+	);
 
 	const query = {
-		name: `get rows from ${query_object.table}`,
-		text: query_object.to_query,
+		name: `get rows from ${queryObject.table}`,
+		text: queryObject.to_query,
 		values: [area_id],
 	};
 
@@ -171,11 +159,11 @@ function geojson_query_database(query_object, area_id, client, Feature) {
 			client.query(query)
 				.then(res => {
 					if (!res) console.error(res);
-					return res.rows.map(row_to_feature);
+					return res.rows.map(rowToFeature);
 				})
 				.catch(e => {
 					console.error(e.stack);
-					reject(e); //TODO is this a good pattern
+					reject(e);
 				})
 		);
 	});
@@ -1067,7 +1055,5 @@ function KML_express_app_wrappy_thing() {
 	app.listen(3000);
 }
 
-const areaId = 401;
-
-// get_geojson(areaId);
-KML_express_app_wrappy_thing();
+get_geojson(401);
+// KML_express_app_wrappy_thing();
