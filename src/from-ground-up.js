@@ -132,7 +132,7 @@ function JoinQuery(query1, query2, join_on, where_clause) {
 	 * @param	{Client}			client - pg {Client} object used to query the database
 	 * @return {Promise}							a {Feature} object for each row
 	 */
-function geojson_query_database(queryObject, area_id, client, Feature) {
+function geojsonQueryDatabase(queryObject, area_id, client, Feature) {
 	const row_to_object = _.mergeDeepRight({table: queryObject.table});
 
 	const object_to_feature = geometry_column => row => (
@@ -175,96 +175,7 @@ function geojson_query_database(queryObject, area_id, client, Feature) {
 	 * @param	{Client}	client - a pg postgresql client
 	 * @param	{Array}	queries - an array of {Query} objects
 	 */
-function promise_of_geojson(area_id, client, queries, Feature) {
-		/**
-		 * @param {Array} features - list of the features collected
-		 */
-	function FeatureCollection(features)	{
-		this.type = "FeatureCollection";
-		this.features = features;
-	}
-
-	function flatten_warnings(warnings) {
-		return JSON.stringify(warnings);
-	}
-		/**
-		 * decomposes the garbage the database outputs into digestible warnings
-		 * @returns pg rows
-		 */
-
-	function warnify(features) {
-		//decompose the rows into their geometries and collect the unique ones
-		let geometries = Array.from(
-			new Set(features.map(f => f.geometry.coordinates.join(', ')))
-		);
-		geometries = geometries.map(g => g.split(', '));
-
-		const properties = {};
-		geometries.forEach(g => {
-			properties[g] = {};
-			properties[g].warnings = {
-				'managing-risk': [],
-				'concern': []
-			};
-		});
-
-		features.forEach(r => {
-			try {
-				properties[r.geometry.coordinates]['warnings'][r.properties.type].push(r.properties.warning);
-				delete r.properties.warning;
-				delete r.properties.type;
-				for (const key in r.properties) {
-					if ({}.hasOwnProperty.call(r.properties, key)) {
-						properties[r.geometry.coordinates][key] = r.properties[key];
-					}
-				}
-			} catch (e) {
-				console.error(e.stack);
-			}
-		});
-
-		for (const g in properties) {
-			properties[g].warnings = flatten_warnings(properties[g].warnings);
-		}
-
-		const rows_out = geometries.map(geom => {
-			return new Feature(
-				JSON.stringify({
-					type: 'Point',
-					coordinates: geom.map(g => Number.parseFloat(g))
-				}),
-				'decision_points',
-				properties[geom]
-			);
-		});
-
-		return rows_out;
-	}
-
-	return new Promise((resolve, reject) => {
-		const features = [];
-
-		const query_promises = queries.map(query => geojson_query_database(query, area_id, client, Feature));
-		Promise.all(query_promises).then(values => {
-			values.forEach(querys_features => {
-				if (querys_features[0].properties.table === 'decision_points') {
-					querys_features = warnify(querys_features);
-				}
-
-				querys_features.forEach(
-					feature => features.push(feature)
-				);
-			});
-			const collected_features = new FeatureCollection(features);
-			resolve(collected_features);
-		});
-	});
-}
-
-	/**
-	 * prints geojson to console
-	 */
-function get_geojson(area_id) {
+function promise_of_geojson(area_id, client, queries) {
 		/**
 		 * @param {JSON} geometry - GeoJSON geometry object
 		 * @param {string} feature_type	- the table the feature came from
@@ -294,6 +205,100 @@ function get_geojson(area_id) {
 		this.properties.table = feature_type;
 	}
 
+		/**
+		 * @param {Array} features - list of the features collected
+		 */
+	function FeatureCollection(features)	{
+		this.type = "FeatureCollection";
+		this.features = features;
+	}
+
+		/**
+		 * decomposes the garbage the database outputs into digestible warnings
+		 * @returns pg rows
+		 */
+	function warnify(features) {
+		const flatten_warnings = JSON.stringify;
+
+		const getGeometries = _.compose(
+			_.map(_.split(', ')),
+			_.uniq,
+			_.map(_.compose(
+				_.join(', '),
+				_.prop('coordinates'),
+				_.prop('geometry')
+			))
+		);
+
+		const geometries = getGeometries(features);
+
+		const properties = {};
+		geometries.forEach(g => {
+			properties[g] = {};
+			properties[g].warnings = {
+				'managing-risk': [],
+				'concern': []
+			};
+		});
+
+		features.forEach(r => {
+			const warningType = r.properties.type;
+			const coordinates = r.geometry.coordinates;
+			try {
+				properties[coordinates]['warnings'][warningType].push(r.properties.warning);
+				delete r.properties.warning;
+				delete r.properties.type;
+				for (const key in r.properties) {
+					if ({}.hasOwnProperty.call(r.properties, key)) {
+						properties[r.geometry.coordinates][key] = r.properties[key];
+					}
+				}
+			} catch (e) {
+				console.error(e.stack);
+			}
+		});
+
+		for (const g in properties) {
+			properties[g].warnings = flatten_warnings(properties[g].warnings);
+		}
+
+		const rows_out = geometries.map(geom => {
+			return new Feature(
+				JSON.stringify({
+					type: 'Point',
+					coordinates: geom.map(Number.parseFloat)
+				}),
+				'decision_points',
+				properties[geom]
+			);
+		});
+
+		return rows_out;
+	}
+
+	return new Promise((resolve, reject) => {
+		const features = [];
+		const pushOntoFeatures = features.push.bind(features);
+
+		const query_promises = queries.map(query => geojsonQueryDatabase(query, area_id, client, Feature));
+		Promise.all(query_promises).then(values => {
+			values.forEach(querys_features => {
+				if (querys_features[0].properties.table === 'decision_points') {
+					querys_features = warnify(querys_features);
+				}
+
+				querys_features.forEach(pushOntoFeatures);
+			});
+			const collected_features = new FeatureCollection(features);
+			resolve(collected_features);
+		});
+	});
+}
+
+	/**
+	 * prints geojson to console
+	 */
+function get_geojson(area_id) {
 	const queries = [
 		new Query(
 			'areas_vw',
@@ -356,10 +361,9 @@ function get_geojson(area_id) {
 	//{debug} is just a way for me to redirect the output to files
 	const debug = true; //TODO set false in production
 
-	promise_of_geojson(area_id, client, queries, Feature)
+	promise_of_geojson(area_id, client, queries)
 		.then(geoJsonDoc => {
 			client.end();
-			//TODO upload to mapbox
 			if (debug) {
 				console.error(JSON.stringify(geoJsonDoc));
 			}
@@ -467,7 +471,10 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 			return placemark_constructor(row);
 		}
 
-		return object_to_feature(row_to_object(row));
+		return _.compose(
+			object_to_feature,
+			row_to_object
+		)(row);
 	}
 
 	const query = {
@@ -1055,5 +1062,8 @@ function KML_express_app_wrappy_thing() {
 	app.listen(3000);
 }
 
-get_geojson(401);
+// const client = new Client();
+// client.connect();
+// get_KML(401, 'en', client);
+get_geojson(401, 'en', client);
 // KML_express_app_wrappy_thing();
