@@ -133,9 +133,9 @@ function JoinQuery(query1, query2, join_on, where_clause) {
 	 * @return {Promise}							a {Feature} object for each row
 	 */
 function geojsonQueryDatabase(queryObject, area_id, client, Feature) {
-	const row_to_object = _.mergeDeepRight({table: queryObject.table});
+	const rowToObject = _.mergeDeepRight({table: queryObject.table});
 
-	const object_to_feature = geometry_column => row => (
+	const objectToFeature = geometry_column => row => (
 		new Feature(
 			row[geometry_column],
 			row.table,
@@ -144,8 +144,8 @@ function geojsonQueryDatabase(queryObject, area_id, client, Feature) {
 	);
 
 	const rowToFeature = _.compose(
-		object_to_feature('geometry'),
-		row_to_object
+		objectToFeature('geometry'),
+		rowToObject
 	);
 
 	const query = {
@@ -378,104 +378,104 @@ function get_geojson(area_id) {
 	 * @returns {Promise} database rows, formatted using {new_placemark}
 	 */
 function KML_query_database(query_object, area_id, client, new_placemark) {
-	/**
-		* @function row_to_feature
-		* @description transform a feature into an object into a row
-		* @return {Feature}
-		*/
-	function row_to_placemark(row, placemark_constructor) {
-		function row_to_object(row) {
-			row.table = query_object.table;
-			return row;
+		/**
+		 * Constructor for geometry objects.
+		 * @class
+		 * the way the XML parser parses the geometry from the database
+		 * is different from the KML pickler; this reformats the geometry
+		 * for the pickler
+		 */
+	function Geometry(decomposed_geometry) {
+		function new_point(point) {
+			return {
+				Point: [
+					{coordinates: point.coordinates}
+				]
+			};
 		}
 
-		function object_to_feature(row) {
-				/**
-				 * Constructor for geometry objects.
-				 * @class
-				 * the way the XML parser parses the geometry from the database
-				 * is different from the KML pickler; this reformats the geometry
-				 * for the pickler
-				 */
-			function new_geometry(decomposed_geometry) {
-				function new_point(point) {
-					return {
-						Point: [
-							{coordinates: point.coordinates}
-						]
-					};
-				}
-
-				function new_linestring(line_string) {
-					return {
-						LineString: [
-							{coordinates: line_string.coordinates}
-						]
-					};
-				}
-
-				function new_polygon(polygon) {
-					const general_polygon = {
-						Polygon: [{
-							outerBoundaryIs: [{
-								LinearRing: [
-									{coordinates: polygon.outerBoundaryIs.LinearRing.coordinates}
-								]
-							}]
-						}]
-					};
-
-					if(polygon.innerBoundaryIs) {
-						let inner_boundaries;
-						try {
-							inner_boundaries = polygon.innerBoundaryIs.map(linear_ring => {
-								return {
-									LinearRing: [
-										{coordinates: linear_ring.LinearRing.coordinates}
-									]
-								};
-							});
-						} catch (err) { //TODO can this err be removed?
-							inner_boundaries = [
-								{LinearRing: [
-									{coordinates: polygon.innerBoundaryIs.LinearRing.coordinates}
-								]}
-							];
-						}
-
-						general_polygon.Polygon.push({innerBoundaryIs: inner_boundaries});
-						return general_polygon;
-					} else {
-						return general_polygon;
-					}
-				}
-
-				if ('Point' in decomposed_geometry) {
-					return new_point(decomposed_geometry.Point);
-				} else if ('LineString' in decomposed_geometry) {
-					return new_linestring(decomposed_geometry.LineString);
-				} else if ('Polygon' in decomposed_geometry) {
-					return new_polygon(decomposed_geometry.Polygon);
-				} else {
-					//TODO handle multigeometry
-					console.error(decomposed_geometry);
-				}
-			}
-
-			row.geometry = new_geometry(xml_parse_string(row.geometry));
-
-			if (query_object.table === 'decision_points') {
-				return row; //i know it's bad but i can't live like this anymore
-			}
-
-			return placemark_constructor(row);
+		function new_linestring(line_string) {
+			return {
+				LineString: [
+					{coordinates: line_string.coordinates}
+				]
+			};
 		}
 
-		return _.compose(
-			object_to_feature,
-			row_to_object
-		)(row);
+		function new_polygon(polygon) {
+			const general_polygon = {
+				Polygon: [{
+					outerBoundaryIs: [{
+						LinearRing: [
+							{coordinates: polygon.outerBoundaryIs.LinearRing.coordinates}
+						]
+					}]
+				}]
+			};
+
+			if(polygon.innerBoundaryIs) {
+				let inner_boundaries;
+				try {
+					inner_boundaries = polygon.innerBoundaryIs.map(linear_ring => {
+						return {
+							LinearRing: [
+								{coordinates: linear_ring.LinearRing.coordinates}
+							]
+						};
+					});
+				} catch (err) { //TODO can this err be removed?
+					inner_boundaries = [
+						{LinearRing: [
+							{coordinates: polygon.innerBoundaryIs.LinearRing.coordinates}
+						]}
+					];
+				}
+
+				general_polygon.Polygon.push({innerBoundaryIs: inner_boundaries});
+				return general_polygon;
+			} else {
+				return general_polygon;
+			}
+		}
+
+		if ('Point' in decomposed_geometry) {
+			return new_point(decomposed_geometry.Point);
+		} else if ('LineString' in decomposed_geometry) {
+			return new_linestring(decomposed_geometry.LineString);
+		} else if ('Polygon' in decomposed_geometry) {
+			return new_polygon(decomposed_geometry.Polygon);
+		} else {
+			//TODO handle multigeometry
+			console.error(decomposed_geometry);
+		}
 	}
+
+	const rowToObject = _.mergeDeepRight({table: query_object.table});
+
+	const getGeometry = _.compose(
+		Geometry,
+		xml_parse_string,
+		_.prop('geometry')
+	);
+
+	const objectToFeature = _.compose(
+		_.ifElse(
+			_ => (query_object.table === 'decision_points'),
+			_.identity,
+			new_placemark
+		),
+		row => _.mergeDeepLeft({geometry: getGeometry(row)})(row)
+	);
+
+		/**
+		 * @function row_to_feature
+		 * @description transform a feature into an object into a row
+		 * @return {Feature}
+		 */
+	const row_to_placemark = _.compose(
+		objectToFeature,
+		rowToObject
+	);
 
 	const query = {
 		name: `get rows from ${query_object.table}`,
@@ -486,13 +486,11 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 	return new Promise((resolve, reject) => {
 		resolve(
 			client.query(query)
-				.then(res => { 
-					return {
-						table: query_object.table,
-						name: query_object.name,
-						rows: res.rows.map(row => row_to_placemark(row, new_placemark))
-					};
-				})
+				.then(res => ({ 
+					table: query_object.table,
+					name: query_object.name,
+					rows: res.rows.map(row_to_placemark)
+				}))
 				.catch(e => console.error(e.stack))
 		);
 	});
@@ -1062,8 +1060,14 @@ function KML_express_app_wrappy_thing() {
 	app.listen(3000);
 }
 
-// const client = new Client();
-// client.connect();
-// get_KML(401, 'en', client);
-get_geojson(401, 'en', client);
+const client = new Client();
+client.connect();
+const traceKml = _.compose(
+	_.map(
+		trace
+	)
+);
+
+get_KML(401, 'en', client)
+	.then(traceKml);
 // KML_express_app_wrappy_thing();
