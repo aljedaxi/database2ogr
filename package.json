@@ -7,7 +7,7 @@
     "test": "test"
   },
   "dependencies": {
-    "archiver": "^3.1.1",
+    "archiver": "1.0.0",
     "aws-sdk": "^2.549.0",
     "code-prettify": "^0.1.0",
     "eslint": "^6.4.0",
@@ -17,7 +17,7 @@
     "geojsonhint": "^2.0.0",
     "maki": "^2.1.0",
     "mapbox-gl": "^1.4.1",
-    "pg": "^7.12.1",
+    "pg": "6.0.0",
     "ramda": "^0.26.1",
     "tape": "^4.11.0",
     "tokml": "^0.4.0",
