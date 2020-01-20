@@ -298,7 +298,7 @@ function promise_of_geojson(area_id, client, queries) {
 	/**
 	 * prints geojson to console
 	 */
-function get_geojson(area_id) {
+function get_geojson(area_id, client) {
 	const queries = [
 		new Query(
 			'areas_vw',
@@ -354,9 +354,6 @@ function get_geojson(area_id) {
 			true
 		)
 	];
-
-	const client = new Client(); //from require('pg');
-	client.connect();
 
 	//{debug} is just a way for me to redirect the output to files
 	const debug = true; //TODO set false in production
@@ -977,7 +974,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 	 * @param {Writable} output_stream -- stream to which the KMZ is written
 	 * @returns {Writable} output_stream, the same one as the input
 	 */
-function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_dir) {
+function make_KMZ_stream(area_id, lang, output_stream, res, client, icon_number, icon_dir) {
 	function write_to_kmz(kml, output) {
 		const kml_stream = new Readable();
 		kml_stream.push(kml);
@@ -1003,9 +1000,6 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 		archive.finalize();
 		return output;
 	}
-
-	const client = new Client(); //from require('pg');
-	client.connect();
 
 	//11 or 15 are the two valid sizes for icons
 	icon_number = icon_number || [11, 15][0]; 
@@ -1039,17 +1033,26 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 function KML_express_app_wrappy_thing() {
 	const app = require('express')();
 
-	app.get('/:lang/:areaId.kmz', (req, res) => {
-		const areaId = req.params.areaId;
-		const lang = req.params.lang;
-		res.attachment(`${areaId}.kmz`);
-		const output = res;
-		make_KMZ_stream(areaId, lang, output, res)
-			.then(r => {
-				console.log(r);
-			});
+	const client = new Client(process.env.ATES_CONNECTION_STRING);
+	client.connect(err => {
+		if(err) {
+			console.error(err);
+			throw(err);
+		}
+
+		app.get('/:lang/:areaId.kmz', (req, res) => {
+			const areaId = req.params.areaId;
+			const lang = req.params.lang;
+			res.attachment(`${areaId}.kmz`);
+			const output = res;
+			make_KMZ_stream(areaId, lang, output, res, client)
+				.then(r => {
+					console.log(r);
+				});
+		});
+
+		app.listen(3000);
 	});
-	app.listen(3000);
 }
 
 const traceKml = _.compose(
@@ -1058,16 +1061,16 @@ const traceKml = _.compose(
 	)))
 );
 
-const client = new Client(process.env.ATES_CONNECTION_STRING);
-client.connect(err => {
-	if(err) {
-		console.error(err);
-		throw(err);
-	}
+// const client = new Client(process.env.ATES_CONNECTION_STRING);
+// client.connect(err => {
+// 	if(err) {
+// 		console.error(err);
+// 		throw(err);
+// 	}
 
-	get_KML(401, 'en', client)
-		.then(traceKml);
-});
+// 	get_KML(401, 'en', client)
+// 		.then(traceKml);
+// });
 
 
-// KML_express_app_wrappy_thing();
+KML_express_app_wrappy_thing();
