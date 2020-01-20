@@ -1025,11 +1025,9 @@ function make_KMZ_stream(area_id, lang, output_stream, res, icon_number, icon_di
 	//	}
 	//});
 
-	console.log('promising');
 	return new Promise((resolve, reject) => {
 		get_KML(area_id, lang, client, icon_number, icon_dir)
 			.then(kml => {
-				console.log('kmled');
 				client.end();
 				res.attachment(`${kml[0].kml[2].name}.kmz`);
 				write_to_kmz(xml(kml), output_stream, icon_number, icon_dir);
@@ -1044,7 +1042,6 @@ function KML_express_app_wrappy_thing() {
 	app.get('/:lang/:areaId.kmz', (req, res) => {
 		const areaId = req.params.areaId;
 		const lang = req.params.lang;
-		trace(areaId, lang);
 		res.attachment(`${areaId}.kmz`);
 		const output = res;
 		make_KMZ_stream(areaId, lang, output, res)
@@ -1052,18 +1049,25 @@ function KML_express_app_wrappy_thing() {
 				console.log(r);
 			});
 	});
-	trace('dab')
 	app.listen(3000);
 }
 
-const client = new Client();
-client.connect();
 const traceKml = _.compose(
 	_.map(_.map(_.map(
 		trace
 	)))
 );
 
-get_KML(401, 'en', client)
-	.then(traceKml);
+const client = new Client(process.env.ATES_CONNECTION_STRING);
+client.connect(err => {
+	if(err) {
+		console.error(err);
+		throw(err);
+	}
+
+	get_KML(401, 'en', client)
+		.then(traceKml);
+});
+
+
 // KML_express_app_wrappy_thing();
