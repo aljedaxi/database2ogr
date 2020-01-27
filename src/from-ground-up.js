@@ -12,14 +12,19 @@ const Client = require('pg').Client;
 const archiver = require('archiver');
 const _ = require('ramda');
 
-const trace = s => {
-	console.log(s);
-	return s;
+const tee = f => x => {
+	f(x);
+	return x;
 };
 
-const prependedLogging = p => l => trace(`${p} ${l}`);
+const trace = tee(console.log);
+const errorTrace = tee(console.error);
+
+const prependedLogging      = p => l => trace(`${p} ${l}`);
+const prependedErrorLogging = p => l => errorTrace(`${p} ${l}`);
 
 const x11Log = prependedLogging('(II)');
+const x11Err = prependedErrorLogging('(EE)');
 
 /**
 	 * @class
@@ -152,7 +157,7 @@ function geojsonQueryDatabase(queryObject, area_id, client, Feature) {
 			client.query(query)
 				.then(res => {
 					if (!res) {
-						console.error(res);
+						console.error(new Error('Error connecting to database'));
 					}
 
 					return res.rows.map(rowToFeature);
@@ -358,7 +363,7 @@ function get_geojson(area_id, client) {
 		.then(geoJsonDoc => {
 			client.end();
 			if (debug) {
-				console.error(JSON.stringify(geoJsonDoc));
+				console.log(JSON.stringify(geoJsonDoc));
 			}
 		});
 }
@@ -425,10 +430,20 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 			return general_polygon;
 		}
 
-		return ('Point' in decomposed_geometry) ? new_point(decomposed_geometry.Point) 
-		: ('LineString' in decomposed_geometry) ? new_linestring(decomposed_geometry.LineString) 
-		:   (('Polygon' in decomposed_geometry) ? new_polygon(decomposed_geometry.Polygon) 
-		: /*           Else                  */   console.error(decomposed_geometry));
+		const innerMultiGeometries = geometries => (
+				('Polygon' in geometries) ? geometries.Polygon.map(new_polygon)
+			: /*         else          */ prependedErrorLogging('non polygon multi geometry?')(geometries)
+		);
+
+		const newMultiGeometry = geometries => ({
+			MultiGeometry: innerMultiGeometries(geometries)
+		});
+
+		return    ('Point' in decomposed_geometry) ? new_point(decomposed_geometry.Point) 
+		:    ('LineString' in decomposed_geometry) ? new_linestring(decomposed_geometry.LineString) 
+		:      (('Polygon' in decomposed_geometry) ? new_polygon(decomposed_geometry.Polygon) 
+		: ('MultiGeometry' in decomposed_geometry) ? newMultiGeometry(decomposed_geometry.MultiGeometry)
+		: /*           Else                  */      x11Err(decomposed_geometry));
 	}
 
 	const rowToObject = _.mergeDeepRight({table: query_object.table});
