@@ -638,6 +638,8 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 	const ICON_DIR = `${icon_dir_name}-${icon_number}`;
 	const ICON_EXT = 'png';
 	const POI_COLOR = '000000ff';
+	const FULL_TRANSPARENT = '00000000';
+	const DP_COLOR = 'ffff00ff';
 
 	const style_urls = {
 		zones: [
@@ -670,7 +672,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		const new_Icon = (icon, color) => ({
 			Icon: [
 				{href: `${ICON_DIR}/new-${icon}-${icon_number}.${ICON_EXT}`},
-				{color}
+				// {color}
 			]
 		});
 
@@ -720,7 +722,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 				], 'PolyStyle')
 			],
 			areas_vw: new_Style(style_urls.areas_vw, [
-				{color: '00000000'} // Fully transparent
+				{color: FULL_TRANSPARENT}
 			], 'PolyStyle'),
 			access_roads: new_Style(style_urls.access_roads, [
 				{color: 'ffff00ff'}, // Yellow
@@ -731,8 +733,8 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 				{color: 'ff0000ff'}
 			], 'LineStyle'),
 			decision_points: new_Style(style_urls.decision_points, [
-				{color: 'ff0000ff'},
-				new_Icon('cross', 'ff0000ff')
+				{color: DP_COLOR},
+				new_Icon('decision-point-icon', DP_COLOR)
 			], 'IconStyle'),
 			points_of_interest: {
 				Other: new_Style(style_urls.points_of_interest.Other, [
