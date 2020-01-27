@@ -11,10 +11,15 @@ const xml_parse_string = require('fast-xml-parser').parse;
 const Client = require('pg').Client;
 const archiver = require('archiver');
 const _ = require('ramda');
+
 const trace = s => {
 	console.log(s);
 	return s;
 };
+
+const prependedLogging = p => l => trace(`${p} ${l}`);
+
+const x11Log = prependedLogging('(II)');
 
 /**
 	 * @class
@@ -405,7 +410,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 							{coordinates: linear_ring.LinearRing.coordinates}
 						]
 					}));
-				} catch (error) { // TODO can this err be removed?
+				} catch (error) { 
 					inner_boundaries = [
 						{LinearRing: [
 							{coordinates: polygon.innerBoundaryIs.LinearRing.coordinates}
@@ -420,10 +425,10 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 			return general_polygon;
 		}
 
-		return ('Point' in decomposed_geometry) ? new_point(decomposed_geometry.Point) :
-			('LineString' in decomposed_geometry) ? new_linestring(decomposed_geometry.LineString) :
-				(('Polygon' in decomposed_geometry) ? new_polygon(decomposed_geometry.Polygon) :
-		  /*           Else                  */ console.error(decomposed_geometry));
+		return ('Point' in decomposed_geometry) ? new_point(decomposed_geometry.Point) 
+		: ('LineString' in decomposed_geometry) ? new_linestring(decomposed_geometry.LineString) 
+		:   (('Polygon' in decomposed_geometry) ? new_polygon(decomposed_geometry.Polygon) 
+		: /*           Else                  */   console.error(decomposed_geometry));
 	}
 
 	const rowToObject = _.mergeDeepRight({table: query_object.table});
@@ -479,14 +484,11 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 	 */
 function promise_KML(area_id, client, queries, new_placemark, styles) {
 	/**
-		 * Decomposes the garbage the database outputs into digestible warnings
+		 * Decomposes the warnings as supplied by the database;
+		 * Creates HTML tables
 		 * @returns pg rows
 		 */
 	function warnify(wrapped_rows) {
-		/**
-			 * Takes the warning parts of the warnings and wraps them in an HTML table
-			 * @returns {string} an HTML table , following the google style guide
-			 */
 		const warningsTable = warnings => {
 			const toChecklist = bullet => _.compose(
 				_.join(''),
@@ -511,6 +513,10 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			warningsTable
 		);
 
+		/**
+			 * Takes the warning parts of the warnings and wraps them in an HTML table
+			 * @returns {string} an HTML table , following the google style guide
+			 */
 		const getGeometries = _.compose(
 			_.uniq,
 			_.map(_.compose(
@@ -555,7 +561,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 		return rows_out;
 	}
 
-	function new_document(name, folders, styles) {
+	const new_document = (name, folders, styles) => {
 		const doc = [].concat(
 			folders.map(Folder => ({Folder})),
 			styles,
@@ -571,7 +577,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 				{name}
 			]
 		}];
-	}
+	};
 
 	const new_folder = (name, features) => [].concat(
 		features.map(Placemark => ({Placemark})),
@@ -585,10 +591,10 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 		const query_promises = queries.map(query => KML_query_database(query, area_id, client, new_placemark));
 		Promise.all(query_promises).then(values => {
 			values.forEach(wrapped_querys_rows => {
+				trace(wrapped_querys_rows.table);
 				if (wrapped_querys_rows.table === 'areas_vw') {
 					doc_name = wrapped_querys_rows.rows[0][1].name;
 				} else if (wrapped_querys_rows.table === 'decision_points') {
-					// TODO make sure the folder is getting its name properly
 					const wrapped_warnified_rows = warnify(wrapped_querys_rows);
 					wrapped_querys_rows.rows = wrapped_warnified_rows.map(new_placemark);
 				}
@@ -970,7 +976,7 @@ const kmlExpressAppWrappyThing = () => {
 			res.attachment(`${areaId}.kmz`);
 			make_KMZ_stream(areaId, lang, res, res, client)
 				.then(_ => {
-					console.log(
+					x11Log(
 						JSON.stringify(
 							req.params
 						)
@@ -979,7 +985,7 @@ const kmlExpressAppWrappyThing = () => {
 		});
 
 		app.listen(3000, () => {
-			console.log('(II) express app started');
+			x11Log('express app started');
 		});
 	});
 };
