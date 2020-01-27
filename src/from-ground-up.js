@@ -1,11 +1,5 @@
 'use strict';
 
-/**
-	 * @file everything to output database areas as json
-	 * @author jacob
-	 * @version 0.1
-	 */
-
 /*
 	 * jsdoc comments are extra indented because i use indent folding in vi
 	 * and i don't want to see the documentation without explicitly unfolding it
@@ -17,7 +11,6 @@ const xml_parse_string = require('fast-xml-parser').parse;
 const Client = require('pg').Client;
 const archiver = require('archiver');
 const _ = require('ramda');
-// Let geojsonhint = require('geojsonhint');
 const trace = s => {
 	console.log(s);
 	return s;
@@ -485,7 +478,6 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 	 * @returns promise of a KML document
 	 */
 function promise_KML(area_id, client, queries, new_placemark, styles) {
-	// TODO returns html with \' in it
 	/**
 		 * Decomposes the garbage the database outputs into digestible warnings
 		 * @returns pg rows
@@ -599,7 +591,6 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 					// TODO make sure the folder is getting its name properly
 					const wrapped_warnified_rows = warnify(wrapped_querys_rows);
 					wrapped_querys_rows.rows = wrapped_warnified_rows.map(new_placemark);
-					trace(wrapped_querys_rows);
 				}
 
 				folders.push(
@@ -916,6 +907,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 	 * @returns {Writable} output_stream, the same one as the input
 	 */
 function make_KMZ_stream(area_id, lang, output_stream, res, client, icon_number, icon_dir) {
+	const returnIfIn = (v, a) => a.filter(_.equals(v))[0];
 	function write_to_kmz(kml, output) {
 		const kml_stream = new Readable();
 		kml_stream.push(kml);
@@ -943,22 +935,9 @@ function make_KMZ_stream(area_id, lang, output_stream, res, client, icon_number,
 	}
 
 	// 11 or 15 are the two valid sizes for icons
-	icon_number = icon_number || [11, 15][0];
-	console.assert(icon_number in {11: 11, 15: 15});
+	icon_number = returnIfIn(icon_number, [11, 15]) || 11;
+	lang = returnIfIn(lang, ['en','fr']) || 'en';
 	icon_dir = icon_dir || 'files';
-	console.assert(lang in {en: 'en', fr: 'fr'});
-
-	// Write directly to file
-	// const output = fs.createWriteStream(`./${area_id}.kmz`);
-	// write to stream
-	// let buff_array = [];
-	// const output = new Writable({
-	//	write(chunk, encoding, callback) {
-	//		buff_array.push(chunk);
-	//		console.log(buff_array);
-	//		callback();
-	//	}
-	// });
 
 	return new Promise((resolve, reject) => {
 		get_KML(area_id, lang, client, icon_number, icon_dir)
