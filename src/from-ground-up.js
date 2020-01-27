@@ -500,7 +500,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 				_.join(''),
 				_.map(_.compose(
 					c => `<tr><td><span class="${bullet}">&#x2717;</span>${c}</td></tr>`,
-					_.replace(/\\\'/g, '\''),
+					_.replace(/\\\'/g, '\'')
 				))
 			);
 
