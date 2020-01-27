@@ -11,10 +11,10 @@
 	 * and i don't want to see the documentation without explicitly unfolding it
 	 */
 
-const {Readable} = require('stream');
+const Readable = require('stream').Readable;
 const xml = require('xml');
 const xml_parse_string = require('fast-xml-parser').parse;
-const {Client} = require('pg');
+const Client = require('pg').Client;
 const archiver = require('archiver');
 const _ = require('ramda');
 // Let geojsonhint = require('geojsonhint');
@@ -241,7 +241,7 @@ function promise_of_geojson(area_id, client, queries) {
 
 		features.forEach(r => {
 			const warningType = r.properties.type;
-			const {coordinates} = r.geometry;
+			const coordinates = r.geometry.coordinates;
 			try {
 				properties[coordinates].warnings[warningType].push(r.properties.warning);
 				delete r.properties.warning;
@@ -485,6 +485,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 	 * @returns promise of a KML document
 	 */
 function promise_KML(area_id, client, queries, new_placemark, styles) {
+	// TODO returns html with \' in it
 	/**
 		 * Decomposes the garbage the database outputs into digestible warnings
 		 * @returns pg rows
@@ -494,84 +495,29 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			 * Takes the warning parts of the warnings and wraps them in an HTML table
 			 * @returns {string} an HTML table , following the google style guide
 			 */
-		function htmlify(warnings) {
-			function tablify(warnings) {
-				const toChecklist = bullet => _.compose(
-					_.join('\n				'),
-					_.map(c => `<tr> <td><span class="${bullet}">&#x2717;</span> ${c} </td> </tr>`)
-				);
+		const warningsTable = warnings => {
+			const toChecklist = bullet => _.compose(
+				_.join(''),
+				_.map(_.compose(
+					c => `<tr><td><span class="${bullet}">&#x2717;</span>${c}</td></tr>`,
+					_.replace(/\\\'/g, '\''),
+				))
+			);
 
-				const concerns = toChecklist('red-x')(warnings.Concern);
-				const risks = toChecklist('green-check')(warnings['Managing risk']);
+			const concerns = toChecklist('red-x')(warnings.Concern);
+			const risks = toChecklist('green-check')(warnings['Managing risk']);
 
-				return `
-					<table class="orange-table">
-						<tbody>
-							<tr>
-								<th class="first">Concern</th>
-							</tr>
-							${concerns}
-							</tr>
-							<tr>
-							<tr>
-								<th>Managing risk</th>
-							</tr>
-							${risks}
-							<tr>
-						</tbody>
-					</table>
-				`;
-			}
+			return `<table class="orange-table"><tbody><tr><th class="first">Concern</th></tr>${concerns}</tr><tr><tr><th>Managing risk</th></tr>${risks}<tr></tbody></table>`;
+		};
 
-			const table = tablify(warnings);
+		const warningsPopup = table => (
+			`<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1"><style type="text/css"><!--.orange-table {border: 1px solid black; background-color: #FFC000; font-size:9.0pt; padding: 10px 0; width: 333px;} .orange-table td, th { padding: 2px 10px; } .orange-table th { font-weight: bold; border-top: 1px solid black; text-align: left; } .orange-table th.first { border: none; } .green-check { color:#008A00; font-size:larger; display: block; float: left; padding-right: 4px; } .red-x { color: red; font-size: larger; display: block; float: left; padding-right: 4px; } --></style>${table}`
+		);
 
-			const html = `
-				<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
-
-				<style type="text/css">
-				<!--
-					.orange-table {
-									border: 1px solid black;
-									background-color: #FFC000;
-									font-size:9.0pt;
-									padding: 10px 0;
-									width: 333px;
-					}
-					
-					.orange-table td, th {
-						padding: 2px 10px;
-					}
-					
-					.orange-table th { 
-						font-weight: bold; 
-						border-top: 1px solid black; 
-						text-align: left; 
-					}
-					
-					.orange-table th.first { border: none; }
-					
-					.green-check {
-						color:#008A00;
-						font-size:larger;
-						display: block;
-						float: left;
-						padding-right: 4px;
-					}
-					.red-x {
-						color: red;
-						font-size: larger;
-						display: block;
-						float: left;
-						padding-right: 4px;
-					}
-				-->
-				</style>
-
-				${table}
-			`;
-
-			return html;
-		}
+		const htmlify = _.compose(
+			warningsPopup,
+			warningsTable
+		);
 
 		const getGeometries = _.compose(
 			_.uniq,
@@ -583,7 +529,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			))
 		);
 
-		const {rows} = wrapped_rows;
+		const rows = wrapped_rows.rows;
 
 		const geometries = getGeometries(rows);
 
@@ -596,7 +542,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 		});
 		rows.forEach(r => {
 			try {
-				const {coordinates} = r.geometry.Point[0];
+				const coordinates = r.geometry.Point[0].coordinates;
 				warnings[coordinates][r.type].push(r.warning);
 			} catch (error) {
 				console.error(error.stack);
@@ -651,8 +597,9 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 					doc_name = wrapped_querys_rows.rows[0][1].name;
 				} else if (wrapped_querys_rows.table === 'decision_points') {
 					// TODO make sure the folder is getting its name properly
-					wrapped_querys_rows = warnify(wrapped_querys_rows);
-					wrapped_querys_rows.rows = wrapped_querys_rows.map(r => new_placemark(r));
+					const wrapped_warnified_rows = warnify(wrapped_querys_rows);
+					wrapped_querys_rows.rows = wrapped_warnified_rows.map(new_placemark);
+					trace(wrapped_querys_rows);
 				}
 
 				folders.push(
@@ -855,14 +802,14 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 			placemark.push({description});
 		}
 
-		const {table} = row;
-		const {geometry} = row;
-		const {name} = row;
-		const {comments} = row;
-		const {class_code} = row;
-		const {type} = row;
-		const {description} = row;
-		const {warnings} = row;
+		const table = row.table;
+		const geometry = row.geometry;
+		const name = row.name;
+		const comments = row.comments;
+		const class_code = row.class_code;
+		const type = row.type;
+		const description = row.description;
+		const warnings = row.warnings;
 		let styleUrl;
 
 		const placemark = [];
@@ -1039,7 +986,8 @@ const kmlExpressAppWrappyThing = () => {
 		});
 
 		app.get('/:lang/:areaId.kmz', (req, res) => {
-			const {areaId, lang} = req.params;
+			const areaId = req.params.areaId;
+			const lang = req.params.lang;
 			res.attachment(`${areaId}.kmz`);
 			make_KMZ_stream(areaId, lang, res, res, client)
 				.then(_ => {
