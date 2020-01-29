@@ -639,7 +639,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 	const ICON_EXT = 'png';
 	const POI_COLOR = '000000ff';
 	const FULL_TRANSPARENT = '00000000';
-	const DP_COLOR = 'ffff00ff';
+	const DP_COLOR = 'ffc107ff';
 
 	const style_urls = {
 		zones: [
