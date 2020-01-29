@@ -176,7 +176,7 @@ function geojsonQueryDatabase(queryObject, area_id, client, Feature) {
 	 * @param	{Client}	client - a pg postgresql client
 	 * @param	{Array}	queries - an array of {Query} objects
 	 */
-function promise_of_geojson(area_id, client, queries) {
+function promiseOfGeoJson(areaId, client, queries) {
 	/**
 		 * @param {JSON} geometry - GeoJSON geometry object
 		 * @param {string} feature_type	- the table the feature came from
@@ -263,7 +263,7 @@ function promise_of_geojson(area_id, client, queries) {
 			properties[g].warnings = flatten_warnings(properties[g].warnings);
 		}
 
-		const rows_out = geometries.map(geom => {
+		const rowsOut = geometries.map(geom => {
 			return new Feature(
 				JSON.stringify({
 					type: 'Point',
@@ -274,14 +274,14 @@ function promise_of_geojson(area_id, client, queries) {
 			);
 		});
 
-		return rows_out;
+		return rowsOut;
 	}
 
 	return new Promise((resolve, reject) => {
 		const features = [];
 		const pushOntoFeatures = features.push.bind(features);
 
-		const query_promises = queries.map(query => geojsonQueryDatabase(query, area_id, client, Feature));
+		const query_promises = queries.map(query => geojsonQueryDatabase(query, areaId, client, Feature));
 		Promise.all(query_promises).then(values => {
 			values.forEach(querys_features => {
 				if (querys_features[0].properties.table === 'decision_points') {
@@ -359,7 +359,7 @@ function get_geojson(area_id, client) {
 	// {debug} is just a way for me to redirect the output to files
 	const debug = true; // TODO set false in production
 
-	promise_of_geojson(area_id, client, queries)
+	promiseOfGeoJson(area_id, client, queries)
 		.then(geoJsonDoc => {
 			client.end();
 			if (debug) {
@@ -383,21 +383,21 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 		 * is different from the KML pickler; this reformats the geometry
 		 * for the pickler
 		 */
-	function Geometry(decomposed_geometry) {
-		const new_point = point => ({
+	function Geometry(decomposedGeometry) {
+		const newPoint = point => ({
 			Point: [
 				{coordinates: point.coordinates}
 			]
 		});
 
-		const new_linestring = line_string => ({
+		const newLineString = lineString => ({
 			LineString: [
-				{coordinates: line_string.coordinates}
+				{coordinates: lineString.coordinates}
 			]
 		});
 
-		function new_polygon(polygon) {
-			const general_polygon = {
+		function newPolygon(polygon) {
+			const generalPolygon = {
 				Polygon: [{
 					outerBoundaryIs: [{
 						LinearRing: [
@@ -408,30 +408,30 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 			};
 
 			if (polygon.innerBoundaryIs) {
-				let inner_boundaries;
+				let innerBoundaries;
 				try {
-					inner_boundaries = polygon.innerBoundaryIs.map(linear_ring => ({
+					innerBoundaries = polygon.innerBoundaryIs.map(linear_ring => ({
 						LinearRing: [
 							{coordinates: linear_ring.LinearRing.coordinates}
 						]
 					}));
 				} catch (error) { 
-					inner_boundaries = [
+					innerBoundaries = [
 						{LinearRing: [
 							{coordinates: polygon.innerBoundaryIs.LinearRing.coordinates}
 						]}
 					];
 				}
 
-				general_polygon.Polygon.push({innerBoundaryIs: inner_boundaries});
-				return general_polygon;
+				generalPolygon.Polygon.push({innerBoundaryIs: innerBoundaries});
+				return generalPolygon;
 			}
 
-			return general_polygon;
+			return generalPolygon;
 		}
 
 		const innerMultiGeometries = geometries => (
-				('Polygon' in geometries) ? geometries.Polygon.map(new_polygon)
+				('Polygon' in geometries) ? geometries.Polygon.map(newPolygon)
 			: /*         else          */ prependedErrorLogging('non polygon multi geometry?')(geometries)
 		);
 
@@ -439,11 +439,11 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 			MultiGeometry: innerMultiGeometries(geometries)
 		});
 
-		return    ('Point' in decomposed_geometry) ? new_point(decomposed_geometry.Point) 
-		:    ('LineString' in decomposed_geometry) ? new_linestring(decomposed_geometry.LineString) 
-		:      (('Polygon' in decomposed_geometry) ? new_polygon(decomposed_geometry.Polygon) 
-		: ('MultiGeometry' in decomposed_geometry) ? newMultiGeometry(decomposed_geometry.MultiGeometry)
-		: /*           Else                  */      x11Err(decomposed_geometry));
+		return    ('Point' in decomposedGeometry) ? newPoint(decomposedGeometry.Point)
+		:    ('LineString' in decomposedGeometry) ? newLineString(decomposedGeometry.LineString)
+		:      (('Polygon' in decomposedGeometry) ? newPolygon(decomposedGeometry.Polygon)
+		: ('MultiGeometry' in decomposedGeometry) ? newMultiGeometry(decomposedGeometry.MultiGeometry)
+		: /*           Else                  */      x11Err(decomposedGeometry));
 	}
 
 	const rowToObject = _.mergeDeepRight({table: query_object.table});
@@ -468,7 +468,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 		 * @description transform a feature into an object into a row
 		 * @return {Feature}
 		 */
-	const row_to_placemark = _.compose(
+	const rowToPlacemark = _.compose(
 		objectToFeature,
 		rowToObject
 	);
@@ -485,7 +485,7 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 				.then(res => ({
 					table: query_object.table,
 					name: query_object.name,
-					rows: res.rows.map(row_to_placemark)
+					rows: res.rows.map(rowToPlacemark)
 				}))
 				.catch(error => console.error(error.stack))
 		);
@@ -493,17 +493,17 @@ function KML_query_database(query_object, area_id, client, new_placemark) {
 }
 
 /**
-	 * @param {function} new_placemark -- a placemark constructor
+	 * @param {function} newPlacemark -- a placemark constructor
 	 * @param {Array} styles -- see styles_for_header
 	 * @returns promise of a KML document
 	 */
-function promise_KML(area_id, client, queries, new_placemark, styles) {
+function promiseKML(area_id, client, queries, newPlacemark, styles) {
 	/**
 		 * Decomposes the warnings as supplied by the database;
 		 * Creates HTML tables
 		 * @returns pg rows
 		 */
-	function warnify(wrapped_rows) {
+	function warnify(wrappedRows) {
 		const warningsTable = warnings => {
 			const toChecklist = bullet => _.compose(
 				_.join(''),
@@ -542,7 +542,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			))
 		);
 
-		const rows = wrapped_rows.rows;
+		const rows = wrappedRows.rows;
 
 		const geometries = getGeometries(rows);
 
@@ -562,7 +562,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			}
 		});
 		// Decompose the rows into their geometries and collect the unique ones
-		const rows_out = geometries.map(geom => ({
+		const rowsOut = geometries.map(geom => ({
 			geometry: {
 				Point: [
 					{coordinates: geom}
@@ -573,10 +573,10 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 			description: htmlify(warnings[geom]),
 			table: 'decision_points'
 		}));
-		return rows_out;
+		return rowsOut;
 	}
 
-	const new_document = (name, folders, styles) => {
+	const newDocument = (name, folders, styles) => {
 		const doc = [].concat(
 			folders.map(Folder => ({Folder})),
 			styles,
@@ -594,7 +594,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 		}];
 	};
 
-	const new_folder = (name, features) => [].concat(
+	const newFolder = (name, features) => [].concat(
 		features.map(Placemark => ({Placemark})),
 		[{name}]
 	);
@@ -603,22 +603,22 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 		const folders = [];
 		let doc_name = '';
 
-		const query_promises = queries.map(query => KML_query_database(query, area_id, client, new_placemark));
-		Promise.all(query_promises).then(values => {
+		const queryPromises = queries.map(query => KML_query_database(query, area_id, client, newPlacemark));
+		Promise.all(queryPromises).then(values => {
 			values.forEach(wrapped_querys_rows => {
 				trace(wrapped_querys_rows.table);
 				if (wrapped_querys_rows.table === 'areas_vw') {
 					doc_name = wrapped_querys_rows.rows[0][1].name;
 				} else if (wrapped_querys_rows.table === 'decision_points') {
 					const wrapped_warnified_rows = warnify(wrapped_querys_rows);
-					wrapped_querys_rows.rows = wrapped_warnified_rows.map(new_placemark);
+					wrapped_querys_rows.rows = wrapped_warnified_rows.map(newPlacemark);
 				}
 
 				folders.push(
-					new_folder(wrapped_querys_rows.name, wrapped_querys_rows.rows)
+					newFolder(wrapped_querys_rows.name, wrapped_querys_rows.rows)
 				);
 			});
-			const KML_doc = new_document(doc_name, folders, styles);
+			const KML_doc = newDocument(doc_name, folders, styles);
 			resolve(KML_doc);
 		}).catch(reject);
 	});
@@ -632,7 +632,7 @@ function promise_KML(area_id, client, queries, new_placemark, styles) {
 	 * contains all the preprocessing necessary to run {promise_KML}
 	 * @returns {Promise} promise_KML
 	 */
-function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
+function getKML(area_id, lang, client, icon_number, icon_dir_name) {
 	lang = lang || 'en';
 	const LINE_WIDTH = 3; // For LineStyles, in pixels
 	const ICON_DIR = `${icon_dir_name}-${icon_number}`;
@@ -641,7 +641,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 	const FULL_TRANSPARENT = '00000000';
 	const DP_COLOR = 'ffc107ff';
 
-	const style_urls = {
+	const styleUrls = {
 		zones: [
 			'filler for slot 0',
 			'zone_green_style',
@@ -663,13 +663,14 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		}
 	};
 
+	//TODO turn this into OOP
 	/**
 		 * I had to write an ungodly amount of code to deal with styling
 		 * this function is here to hide all that
 		 * @returns {Array} returns an array of Style objects
 		 */
-	const deal_with_styling = () => {
-		const new_Icon = (icon, color) => ({
+	const dealWithStyling = () => {
+		const newIcon = (icon, color) => ({
 			Icon: [
 				{href: `${ICON_DIR}/new-${icon}-${icon_number}.${ICON_EXT}`},
 				// {color}
@@ -680,9 +681,9 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 			 * Constructor for KML Style tags
 			 * @class
 			 */
-		const new_Style = (url, styles, style_type) => {
+		const newStyle = (url, styles, style_type) => {
 			const reverse = s => s.split('').reverse().join('');
-			const basic_style = (style_type, default_stylings) => {
+			const basicStyle = (style_type, default_stylings) => {
 				return styles => {
 					// KML uses aabbggrr hex codes, unlike the rest of the civilized world,
 					// which uses rrggbbaa. red green blue alpha/transparency
@@ -694,9 +695,9 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 			};
 
 			const style_types = {
-				LineStyle: basic_style('LineStyle', [{width: LINE_WIDTH}]),
-				PolyStyle: basic_style('PolyStyle', []),
-				IconStyle: basic_style('IconStyle', [])
+				LineStyle: basicStyle('LineStyle', [{width: LINE_WIDTH}]),
+				PolyStyle: basicStyle('PolyStyle', []),
+				IconStyle: basicStyle('IconStyle', [])
 			};
 
 			return {
@@ -708,87 +709,87 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		};
 
 		// Any color in here is formatted rrggbbaa
-		// new_Style reverses it for kml
+		// newStyle reverses it for kml
 		const styles = {
 			zones: [
-				new_Style(style_urls.zones[1], [
+				newStyle(styleUrls.zones[1], [
 					{color: '55ff0088'} // Green
 				], 'PolyStyle'),
-				new_Style(style_urls.zones[2], [
+				newStyle(styleUrls.zones[2], [
 					{color: '0000ff88'} // Blue
 				], 'PolyStyle'),
-				new_Style(style_urls.zones[3], [
+				newStyle(styleUrls.zones[3], [
 					{color: '00000088'} // Black
 				], 'PolyStyle')
 			],
-			areas_vw: new_Style(style_urls.areas_vw, [
+			areas_vw: newStyle(styleUrls.areas_vw, [
 				{color: FULL_TRANSPARENT}
 			], 'PolyStyle'),
-			access_roads: new_Style(style_urls.access_roads, [
+			access_roads: newStyle(styleUrls.access_roads, [
 				{color: 'ffff00ff'}, // Yellow
 				{'gx:outerColor': 'ff00ff00'}, // Green
 				{'gx:outerWidth': LINE_WIDTH + 5} // TODO isn't working but isn't important
 			], 'LineStyle'),
-			avalanche_paths: new_Style(style_urls.avalanche_paths, [
+			avalanche_paths: newStyle(styleUrls.avalanche_paths, [
 				{color: 'ff0000ff'}
 			], 'LineStyle'),
-			decision_points: new_Style(style_urls.decision_points, [
+			decision_points: newStyle(styleUrls.decision_points, [
 				{color: DP_COLOR},
-				new_Icon('decision-point-icon', DP_COLOR)
+				newIcon('decision-point-icon', DP_COLOR)
 			], 'IconStyle'),
 			points_of_interest: {
-				Other: new_Style(style_urls.points_of_interest.Other, [
+				Other: newStyle(styleUrls.points_of_interest.Other, [
 					{color: POI_COLOR},
-					new_Icon('marker', POI_COLOR)
+					newIcon('marker', POI_COLOR)
 				], 'IconStyle'),
-				Parking: new_Style(style_urls.points_of_interest.Parking, [
+				Parking: newStyle(styleUrls.points_of_interest.Parking, [
 					{color: POI_COLOR},
-					new_Icon('parking', POI_COLOR)
+					newIcon('parking', POI_COLOR)
 				], 'IconStyle'),
-				'Rescue Cache': new_Style(style_urls.points_of_interest['Rescue Cache'], [
+				'Rescue Cache': newStyle(styleUrls.points_of_interest['Rescue Cache'], [
 					{color: POI_COLOR},
-					new_Icon('blood-bank', POI_COLOR)
+					newIcon('blood-bank', POI_COLOR)
 				], 'IconStyle'),
-				Cabin: new_Style(style_urls.points_of_interest.Cabin, [
+				Cabin: newStyle(styleUrls.points_of_interest.Cabin, [
 					{color: POI_COLOR},
-					new_Icon('shelter', POI_COLOR)
+					newIcon('shelter', POI_COLOR)
 				], 'IconStyle'),
-				Destination: new_Style(style_urls.points_of_interest.Destination, [
+				Destination: newStyle(styleUrls.points_of_interest.Destination, [
 					{color: POI_COLOR},
-					new_Icon('attraction', POI_COLOR)
+					newIcon('attraction', POI_COLOR)
 				], 'IconStyle'),
-				Lake: new_Style(style_urls.points_of_interest.Lake, [
+				Lake: newStyle(styleUrls.points_of_interest.Lake, [
 					{color: POI_COLOR},
-					new_Icon('water', POI_COLOR)
+					newIcon('water', POI_COLOR)
 				], 'IconStyle'),
-				Mountain: new_Style(style_urls.points_of_interest.Mountain, [
+				Mountain: newStyle(styleUrls.points_of_interest.Mountain, [
 					{color: POI_COLOR},
-					new_Icon('mountain', POI_COLOR)
+					newIcon('mountain', POI_COLOR)
 				], 'IconStyle')
 			}
 		};
 
-		const flatten_styles = styles => {
-			const flat_styles = [];
+		const flattenStyles = styles => {
+			const flatStyles = [];
 			_.values(styles).forEach(s => {
 				if (s.Style) {
-					flat_styles.push(s);
+					flatStyles.push(s);
 				} else if (Array.isArray(s)) {
-					s.forEach(x => flat_styles.push(x));
+					s.forEach(x => flatStyles.push(x));
 				} else {
-					_.values(s).forEach(x => flat_styles.push(x));
+					_.values(s).forEach(x => flatStyles.push(x));
 				}
 			});
-			return flat_styles;
+			return flatStyles;
 		};
 
-		return flatten_styles(styles);
+		return flattenStyles(styles);
 	};
 
-	const styles_for_header = deal_with_styling();
+	const stylesForHeader = dealWithStyling();
 
-	const new_placemark = style_urls => row => {
-		function extend_data(placemark, extension, data) {
+	const newPlaceMark = style_urls => row => {
+		function extendData(placemark, extension, data) {
 			let extended = 0;
 			let i = 0;
 			for (const obj of placemark) {
@@ -846,11 +847,11 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		}
 
 		if (warnings) {
-			extend_data(placemark, 'warnings', warnings);
+			extendData(placemark, 'warnings', warnings);
 		}
 
 		if (class_code) {
-			extend_data(placemark, 'class_code', class_code);
+			extendData(placemark, 'class_code', class_code);
 			styleUrl = style_urls[table][class_code];
 		}
 
@@ -859,7 +860,7 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		return placemark;
 	};
 
-	const newer_placemark = new_placemark(style_urls);
+	const newerPlacemark = newPlaceMark(styleUrls);
 
 	const queries = [
 		new Query(
@@ -920,18 +921,18 @@ function get_KML(area_id, lang, client, icon_number, icon_dir_name) {
 		)
 	];
 
-	return promise_KML(area_id, client, queries, newer_placemark, styles_for_header);
+	return promiseKML(area_id, client, queries, newerPlacemark, stylesForHeader);
 }
 
 /**
-	 * @param {number} icon_number		 -- either 11 or 15; the number associated with the icons. don't know what it means.
-	 * @param {string} icon_dir				-- the prefix for the directory that contains the icons.
-	 * @param {Writable} output_stream -- stream to which the KMZ is written
-	 * @returns {Writable} output_stream, the same one as the input
+	 * @param {number} iconNumber		 -- either 11 or 15; the number associated with the icons. don't know what it means.
+	 * @param {string} iconDir				-- the prefix for the directory that contains the icons.
+	 * @param {Writable} outputStream -- stream to which the KMZ is written
+	 * @returns {Writable} outputStream, the same one as the input
 	 */
-function make_KMZ_stream(area_id, lang, output_stream, res, client, icon_number, icon_dir) {
+function makeKMZStream(areaId, lang, outputStream, res, client, iconNumber, iconDir) {
 	const returnIfIn = (v, a) => a.filter(_.equals(v))[0];
-	function write_to_kmz(kml, output) {
+	function writeToKmz(kml, output) {
 		const kml_stream = new Readable();
 		kml_stream.push(kml);
 		kml_stream.push(null);
@@ -952,22 +953,22 @@ function make_KMZ_stream(area_id, lang, output_stream, res, client, icon_number,
 		});
 		archive.pipe(output);
 		archive.append(kml_stream, {name: 'doc.kml'});
-		archive.directory(`${icon_dir}-${icon_number}/`, `${icon_dir}-${icon_number}`);
+		archive.directory(`${iconDir}-${iconNumber}/`, `${iconDir}-${iconNumber}`);
 		archive.finalize();
 		return output;
 	}
 
 	// 11 or 15 are the two valid sizes for icons
-	icon_number = returnIfIn(icon_number, [11, 15]) || 11;
+	iconNumber = returnIfIn(iconNumber, [11, 15]) || 11;
 	lang = returnIfIn(lang, ['en','fr']) || 'en';
-	icon_dir = icon_dir || 'files';
+	iconDir = iconDir || 'files';
 
 	return new Promise((resolve, reject) => {
-		get_KML(area_id, lang, client, icon_number, icon_dir)
+		getKML(areaId, lang, client, iconNumber, iconDir)
 			.then(kml => {
 				res.attachment(`${kml[0].kml[2].name}.kmz`);
-				write_to_kmz(xml(kml), output_stream, icon_number, icon_dir);
-				resolve(output_stream);
+				writeToKmz(xml(kml), outputStream, iconNumber, iconDir);
+				resolve(outputStream);
 			});
 	});
 }
@@ -991,7 +992,7 @@ const kmlExpressAppWrappyThing = () => {
 			const areaId = req.params.areaId;
 			const lang = req.params.lang;
 			res.attachment(`${areaId}.kmz`);
-			make_KMZ_stream(areaId, lang, res, res, client)
+			makeKMZStream(areaId, lang, res, res, client)
 				.then(_ => {
 					x11Log(
 						JSON.stringify(
@@ -1007,11 +1008,11 @@ const kmlExpressAppWrappyThing = () => {
 	});
 };
 
-const traceKml = _.compose(
-	_.map(_.map(_.map(
-		trace
-	)))
-);
+// const traceKml = _.compose(
+// 	_.map(_.map(_.map(
+// 		trace
+// 	)))
+// );
 
 // Const client = new Client(process.env.ATES_CONNECTION_STRING);
 // client.connect(err => {
